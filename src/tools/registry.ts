@@ -1,0 +1,52 @@
+import type { ToolDefinition } from './types'
+
+export const STAGE_ONE_TOOLS: ToolDefinition[] = [
+  {
+    name: 'clarify',
+    description: 'Ask the user to clarify intent',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'proceed',
+    description: 'Enter the execution layer',
+    requiresConfirmation: false,
+  },
+]
+
+export const STAGE_TWO_TOOLS: ToolDefinition[] = [
+  {
+    name: 'ls',
+    description: 'List files in a directory',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'read',
+    description: 'Read a file from the workspace',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'write',
+    description: 'Create or overwrite a file',
+    requiresConfirmation: true,
+  },
+  {
+    name: 'edit',
+    description: 'Edit a file in place',
+    requiresConfirmation: true,
+  },
+  {
+    name: 'glob',
+    description: 'Find files by pattern',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'grep',
+    description: 'Search file contents by pattern',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'bash',
+    description: 'Run a shell command',
+    requiresConfirmation: true,
+  },
+]
