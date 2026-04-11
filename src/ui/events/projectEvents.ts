@@ -1,3 +1,4 @@
+import type { RuntimeStage, RuntimeStatusLevel } from '../../core/contracts'
 import type { EventRecord } from '../../core/contracts'
 import type { RenderableMessage } from '../messages/types'
 
@@ -7,6 +8,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function textFromPayload(payload: Record<string, unknown>): string | null {
   return typeof payload.text === 'string' ? payload.text : null
+}
+
+function isRuntimeStage(value: unknown): value is RuntimeStage {
+  return (
+    value === 'idle' ||
+    value === 'routing' ||
+    value === 'answering' ||
+    value === 'executing' ||
+    value === 'waiting_permission' ||
+    value === 'error'
+  )
+}
+
+function isRuntimeStatusLevel(value: unknown): value is RuntimeStatusLevel {
+  return value === 'info' || value === 'warning' || value === 'error'
 }
 
 function systemWarning(event: EventRecord, message: string): RenderableMessage {
@@ -93,10 +109,12 @@ export function projectEventsToMessages(
         }
       }
       case 'system_status': {
-        const { message, level } = event.payload
+        const { message, level, stage, reason } = event.payload
         if (
           typeof message !== 'string' ||
-          (level !== 'info' && level !== 'warning' && level !== 'error')
+          !isRuntimeStatusLevel(level) ||
+          !isRuntimeStage(stage) ||
+          typeof reason !== 'string'
         ) {
           return systemWarning(
             event,
@@ -106,7 +124,7 @@ export function projectEventsToMessages(
         return {
           id: event.id,
           kind: 'system',
-          message,
+          message: `${stage}: ${reason} - ${message}`,
           level,
           timestamp: event.timestamp,
         }
