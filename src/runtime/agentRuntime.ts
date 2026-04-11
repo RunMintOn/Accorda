@@ -16,6 +16,12 @@ import {
   defaultControlDecision,
   type ControlDecisionRunner,
 } from './controlDecision.js'
+import {
+  createResponsePolicyMessage,
+  responsePolicyMetadata,
+  selectResponsePolicy,
+  type ResponsePolicy,
+} from './responsePolicy.js'
 
 export type ProviderMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -170,15 +176,24 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     )
   }
 
-  function providerMessages() {
-    return [
+  function providerMessages(responsePolicy: ResponsePolicy | null) {
+    const messages: ProviderMessage[] = [
       {
-        role: 'system' as const,
+        role: 'system',
         content:
           'You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
       },
-      ...history.map(eventToProviderMessage).filter(message => message !== null),
     ]
+
+    if (responsePolicy) {
+      messages.push(createResponsePolicyMessage(responsePolicy))
+    }
+
+    messages.push(
+      ...history.map(eventToProviderMessage).filter(message => message !== null),
+    )
+
+    return messages
   }
 
   async function runTurn(userText: string) {
@@ -187,12 +202,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     await append(events, createEvent('user_message', { text: userText }))
 
     const controlDecision = await decideControl({ sessionId, userText })
+    const responsePolicy = selectResponsePolicy(controlDecision)
+    const responsePolicyPayload = responsePolicy
+      ? responsePolicyMetadata(responsePolicy)
+      : {}
     const controlStatus = controlDecisionStatus(controlDecision)
     await append(
       events,
       createEvent('system_status', {
         ...controlStatus,
         controlDecision: controlDecision.kind,
+        ...responsePolicyPayload,
       }),
     )
 
@@ -266,7 +286,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
 
     const result = await options.provider({
-      messages: providerMessages(),
+      messages: providerMessages(responsePolicy),
       toolNames: READ_ONLY_TOOL_NAMES,
     })
 
@@ -284,6 +304,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       events,
       createEvent('system_status', {
         ...providerStatus,
+        ...responsePolicyPayload,
         usage: result.usage,
         model: result.model,
         finishReason: result.finishReason,

@@ -58,6 +58,9 @@ describe('runLocalTurn', () => {
         stage: 'answering',
         reason: 'stage_one_direct_answer',
         source: 'provider',
+        responsePolicyId: 'default_brief_v1',
+        responsePolicyMode: 'appended',
+        responseStyle: 'default_brief',
         usage: {
           inputTokens: 10,
           outputTokens: 4,
@@ -127,6 +130,36 @@ describe('runLocalTurn', () => {
       },
     })
     expect(answer?.payload).not.toEqual({ text: 'echo: hello' })
+  })
+
+  it('appends the default brief policy before sending answer turns to the provider client', async () => {
+    loadConfig.mockReturnValue({
+      provider: {
+        baseURL: 'https://example.com/v1',
+        apiKey: 'test-key',
+        model: 'gpt-4.1-mini',
+      },
+      workspaceRoot: '/tmp/workspace',
+    })
+    createTextCompletion.mockResolvedValue({
+      text: 'hello back',
+      model: 'gpt-4.1-mini',
+    })
+
+    await runLocalTurn('session-brief', 'hello')
+
+    expect(createTextCompletion).toHaveBeenCalledTimes(1)
+    expect(createTextCompletion.mock.calls[0]?.[1].slice(0, 2)).toEqual([
+      {
+        role: 'system',
+        content:
+          'You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+      },
+      {
+        role: 'system',
+        content: 'Be brief. Lead with the conclusion.',
+      },
+    ])
   })
 
   it('persists events to a caller-provided event log path', async () => {

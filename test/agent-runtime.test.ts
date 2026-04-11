@@ -57,6 +57,34 @@ describe('agent runtime', () => {
     expect(calls[1]).toContain('user:second question')
   })
 
+  it('appends the default brief policy for answer turns and records provider metadata', async () => {
+    const calls: string[][] = []
+    const runtime = createAgentRuntime({
+      provider: async ({ messages }) => {
+        calls.push(messages.map(message => `${message.role}:${message.content}`))
+        return { text: 'hello back' }
+      },
+    })
+
+    const events = await runtime.run('hello')
+
+    expect(calls[0]?.slice(0, 2)).toEqual([
+      'system:You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+      'system:Be brief. Lead with the conclusion.',
+    ])
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'system_status',
+        payload: expect.objectContaining({
+          source: 'provider',
+          responsePolicyId: 'default_brief_v1',
+          responsePolicyMode: 'appended',
+          responseStyle: 'default_brief',
+        }),
+      }),
+    )
+  })
+
   it('persists tool results larger than the configured threshold', async () => {
     const artifactDir = await tempRuntimeDir()
     try {
@@ -172,6 +200,9 @@ describe('agent runtime', () => {
           stage: 'routing',
           reason: 'stage_one_clarify_request',
           controlDecision: 'clarify',
+          responsePolicyId: 'clarify_direct_v1',
+          responsePolicyMode: 'appended',
+          responseStyle: 'clarify_direct',
         }),
       }),
     )
@@ -208,6 +239,13 @@ describe('agent runtime', () => {
         }),
       }),
     )
+    expect(
+      events.some(
+        event =>
+          event.type === 'system_status' &&
+          'responsePolicyId' in event.payload,
+      ),
+    ).toBe(false)
     expect(events.at(-1)).toMatchObject({
       type: 'assistant_text',
       payload: {
@@ -216,8 +254,9 @@ describe('agent runtime', () => {
     })
   })
 
-  it('uses execute decisions to run read-only tools before provider answers', async () => {
+  it('uses execute decisions to run read-only tools and still appends the brief policy', async () => {
     const workspaceRoot = await tempRuntimeDir()
+    const calls: string[][] = []
     try {
       await writeFile(join(workspaceRoot, 'note.txt'), 'hello from note')
       const runtime = createAgentRuntime({
@@ -226,18 +265,26 @@ describe('agent runtime', () => {
           kind: 'execute',
           reason: 'stage_one_execute',
         }),
-        provider: async () => ({ text: 'tool result inspected' }),
+        provider: async ({ messages }) => {
+          calls.push(messages.map(message => `${message.role}:${message.content}`))
+          return { text: 'tool result inspected' }
+        },
       })
 
       const events = await runtime.run('read note.txt')
 
+      expect(calls[0]?.slice(0, 2)).toEqual([
+        'system:You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+        'system:Be brief. Lead with the conclusion.',
+      ])
       expect(events).toContainEqual(
         expect.objectContaining({
           type: 'system_status',
           payload: expect.objectContaining({
-            stage: 'routing',
-            reason: 'stage_one_execute',
-            controlDecision: 'execute',
+            source: 'provider',
+            responsePolicyId: 'default_brief_v1',
+            responsePolicyMode: 'appended',
+            responseStyle: 'default_brief',
           }),
         }),
       )
