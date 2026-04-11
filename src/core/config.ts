@@ -1,9 +1,11 @@
 import { cwd } from 'node:process'
 
 export type AppConfig = {
-  baseURL: string
-  apiKey: string
-  model: string
+  provider: {
+    baseURL: string
+    apiKey: string
+    model: string
+  }
   workspaceRoot: string
 }
 
@@ -19,9 +21,11 @@ export function loadConfig(
   if (!model) throw new Error('Missing CONTEXTA_MODEL')
 
   return {
-    baseURL,
-    apiKey,
-    model,
+    provider: {
+      baseURL,
+      apiKey,
+      model,
+    },
     workspaceRoot: cwd(),
   }
 }

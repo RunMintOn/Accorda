@@ -10,9 +10,11 @@ describe('loadConfig', () => {
     })
 
     expect(config).toEqual({
-      baseURL: 'https://example.com/v1',
-      apiKey: 'test-key',
-      model: 'gpt-4.1-mini',
+      provider: {
+        baseURL: 'https://example.com/v1',
+        apiKey: 'test-key',
+        model: 'gpt-4.1-mini',
+      },
       workspaceRoot: expect.any(String),
     })
   })
