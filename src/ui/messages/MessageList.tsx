@@ -10,15 +10,18 @@ type Props = {
 
 export function MessageList({ messages, isLoading }: Props) {
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
       {messages.length === 0 ? (
-        <Text color="gray">No messages yet.</Text>
+        <Box flexDirection="column">
+          <Text color="gray">No messages yet.</Text>
+          <Text color="gray">Ask Accorda to inspect, edit, or run commands.</Text>
+        </Box>
       ) : (
         messages.map(message => (
           <MessageRow key={message.id} message={message} />
         ))
       )}
-      {isLoading ? <Text color="gray">Accorda is thinking...</Text> : null}
+      {isLoading ? <Text color="yellow">Thinking...</Text> : null}
     </Box>
   )
 }

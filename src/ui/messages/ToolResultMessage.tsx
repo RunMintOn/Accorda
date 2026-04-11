@@ -22,10 +22,9 @@ export function ToolResultMessage({ message }: Props) {
   return (
     <Box flexDirection="row" marginLeft={2}>
       <Text color={message.ok ? 'green' : 'red'} bold>
-        result
+        {message.ok ? 'Done' : 'Error'} {message.name}
       </Text>
-      <Text>  {message.name}</Text>
-      {content ? <Text color="gray">  {content}</Text> : null}
+      {content ? <Text color="gray">  output: {content}</Text> : null}
     </Box>
   )
 }

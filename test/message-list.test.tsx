@@ -45,8 +45,10 @@ describe('MessageList', () => {
 
     expect(lastFrame()).toContain('You')
     expect(lastFrame()).toContain('read package')
+    expect(lastFrame()).toContain('Tool read')
     expect(lastFrame()).toContain('read')
     expect(lastFrame()).toContain('package.json')
+    expect(lastFrame()).toContain('Done read')
     expect(lastFrame()).toContain('ok')
     expect(lastFrame()).toContain('package read')
   })

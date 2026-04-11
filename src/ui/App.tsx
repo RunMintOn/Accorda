@@ -42,21 +42,21 @@ export function App({ initialEvents = [], onSubmit = defaultSubmit }: Props) {
   }
 
   return (
-    <Box flexDirection="column" padding={1}>
+    <Box flexDirection="column" padding={1} gap={1}>
       <Header sessionId="local" />
-      <Box marginTop={1} flexDirection="column">
+      <Box flexDirection="column">
         <MessageList messages={messages} isLoading={isLoading} />
       </Box>
-      <Box marginTop={1} flexDirection="column">
+      <Box flexDirection="column">
         <PermissionDialog pendingRequest={pendingPermissionRequest} />
       </Box>
-      <Box marginTop={1}>
+      <Box>
         <StatusLine
           isLoading={isLoading}
           hasPendingPermission={pendingPermissionRequest !== null}
         />
       </Box>
-      <Box marginTop={1}>
+      <Box>
         <PromptInput
           value={input}
           isLoading={isLoading}

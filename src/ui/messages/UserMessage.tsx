@@ -9,6 +9,9 @@ type Props = {
 export function UserMessage({ message }: Props) {
   return (
     <Box flexDirection="row">
+      <Text color="cyan">
+        {'>'}{' '}
+      </Text>
       <Text color="cyan" bold>
         You
       </Text>

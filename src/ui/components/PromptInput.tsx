@@ -30,7 +30,7 @@ export function PromptInput({ value, isLoading, onChange, onSubmit }: Props) {
         return
       }
       if (input === '\r' || input === '\n') {
-      onSubmit(valueRef.current)
+        onSubmit(valueRef.current)
         return
       }
       if (input === '\u007F' || input === '\b') {
@@ -51,11 +51,23 @@ export function PromptInput({ value, isLoading, onChange, onSubmit }: Props) {
   }, [onChange, onSubmit, stdin])
 
   return (
-    <Box>
-      <Text>{'> '}</Text>
-      <Text color={value ? undefined : 'gray'}>
-        {value || 'Type a message and press Enter'}
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={isLoading ? 'yellow' : 'cyan'}
+      paddingX={1}
+    >
+      <Text color="gray">
+        Ask Accorda. Press Enter to send. Ctrl+C to exit.
       </Text>
+      <Box>
+        <Text color="cyan">{'> '}</Text>
+        <Text color={value ? undefined : 'gray'}>
+          {isLoading
+            ? 'Thinking...'
+            : value || 'Describe a task or ask a question'}
+        </Text>
+      </Box>
     </Box>
   )
 }

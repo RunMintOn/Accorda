@@ -19,12 +19,11 @@ export function ToolCallMessage({ message }: Props) {
     <Box flexDirection="column" marginLeft={2}>
       <Box flexDirection="row">
         <Text color={message.layer === 'control' ? 'yellow' : 'magenta'} bold>
-          tool
+          Tool {message.name}
         </Text>
-        <Text>  {message.name}</Text>
-        <Text color="gray">  {message.layer}</Text>
+        <Text color="gray">  {message.layer} layer</Text>
       </Box>
-      <Text color="gray">input {compactJson(message.input)}</Text>
+      <Text color="gray">input: {compactJson(message.input)}</Text>
     </Box>
   )
 }
