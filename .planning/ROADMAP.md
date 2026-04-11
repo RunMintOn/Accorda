@@ -12,7 +12,7 @@ Accorda already has a promising CLI shell and runtime skeleton. The roadmap for 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Runtime Foundation & Boundaries** - Make stage/state visibility and runtime boundaries explicit
+- [x] **Phase 1: Runtime Foundation & Boundaries** - Make stage/state visibility and runtime boundaries explicit
 - [ ] **Phase 2: Visible Tool Loop & Permissions** - Turn the execution layer into a real, observable, gated tool loop
 - [ ] **Phase 3: Intent Routing & Task Modes** - Implement answer/clarify/execute routing and cleaner large-task handling
 - [ ] **Phase 4: Session Continuity & Compaction** - Restore sessions reliably and keep long conversations operable
@@ -31,9 +31,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 
 Plans:
-- [ ] 01-01: Formalize runtime state, event, and stage contracts
-- [ ] 01-02: Clean up configuration loading and provider boundary
-- [ ] 01-03: Wire visible status/state projection into the CLI
+- [x] 01-01: Formalize runtime state, event, and stage contracts
+- [x] 01-02: Clean up configuration loading and provider boundary
+- [x] 01-03: Wire visible status/state projection into the CLI
 
 ### Phase 2: Visible Tool Loop & Permissions
 **Goal**: Replace the current stub execution layer with a real transparent tool loop
@@ -102,7 +102,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Runtime Foundation & Boundaries | 0/3 | Not started | - |
+| 1. Runtime Foundation & Boundaries | 3/3 | Complete | 2026-04-11 |
 | 2. Visible Tool Loop & Permissions | 0/3 | Not started | - |
 | 3. Intent Routing & Task Modes | 0/3 | Not started | - |
 | 4. Session Continuity & Compaction | 0/3 | Not started | - |
