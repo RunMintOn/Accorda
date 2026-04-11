@@ -3,6 +3,7 @@ export type EventType =
   | 'tool_call'
   | 'tool_result'
   | 'assistant_text'
+  | 'system_status'
 
 export type EventRecord = {
   id: string
