@@ -2,13 +2,23 @@ import type { ToolDefinition } from './types'
 
 export const STAGE_ONE_TOOLS: ToolDefinition[] = [
   {
-    name: 'clarify',
-    description: 'Ask the user to clarify intent',
+    name: 'answer',
+    description: 'Answer directly without entering the execution layer',
     requiresConfirmation: false,
   },
   {
-    name: 'proceed',
-    description: 'Enter the execution layer',
+    name: 'execute',
+    description: 'Enter the execution layer for an actionable request',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'clarify',
+    description: 'Ask the user to clarify intent before continuing',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'task_mode',
+    description: 'Enter a multi-step task planning and execution flow',
     requiresConfirmation: false,
   },
 ]

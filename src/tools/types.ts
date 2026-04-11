@@ -1,6 +1,8 @@
 export type ToolName =
+  | 'answer'
+  | 'execute'
   | 'clarify'
-  | 'proceed'
+  | 'task_mode'
   | 'ls'
   | 'read'
   | 'write'

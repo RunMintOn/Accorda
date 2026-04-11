@@ -16,6 +16,11 @@ describe('prompt compiler', () => {
     expect(compiled.messages).toEqual([
       { role: 'user', content: '帮我看看这个项目怎么启动' },
     ])
-    expect(compiled.toolNames).toEqual(['clarify', 'proceed'])
+    expect(compiled.toolNames).toEqual([
+      'answer',
+      'execute',
+      'clarify',
+      'task_mode',
+    ])
   })
 })
