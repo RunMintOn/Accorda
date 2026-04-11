@@ -13,7 +13,8 @@ export const STAGE_ONE_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'clarify',
-    description: 'Ask the user to clarify intent before continuing',
+    description:
+      'Ask one direct clarification question when key information is missing. Ask only for the minimum information needed to continue. Do not answer the task yet. Do not ask multiple questions unless strictly necessary. Use this only when the missing information blocks a correct or safe next step.',
     requiresConfirmation: false,
   },
   {
