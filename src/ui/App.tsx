@@ -1,10 +1,13 @@
 import React from 'react'
-import { Box, Text } from 'ink'
+import { Box } from 'ink'
 import type { EventRecord } from '../core/contracts'
 import { runLocalTurn } from '../runtime/defaultRunner'
+import { projectEventsToMessages } from './events/projectEvents'
+import { Header } from './components/Header'
 import { PermissionDialog } from './components/PermissionDialog'
 import { PromptInput } from './components/PromptInput'
-import { TranscriptView } from './components/TranscriptView'
+import { StatusLine } from './components/StatusLine'
+import { MessageList } from './messages/MessageList'
 
 type Props = {
   initialEvents?: EventRecord[]
@@ -19,8 +22,10 @@ export function App({ initialEvents = [], onSubmit = defaultSubmit }: Props) {
   const [events, setEvents] = React.useState<EventRecord[]>(initialEvents)
   const [input, setInput] = React.useState('')
   const [isLoading, setIsLoading] = React.useState(false)
+  const pendingPermissionRequest = null
   const inputRef = React.useRef(input)
   inputRef.current = input
+  const messages = React.useMemo(() => projectEventsToMessages(events), [events])
 
   async function handleSubmit(submittedValue?: string) {
     const text = (submittedValue ?? inputRef.current).trim()
@@ -38,13 +43,18 @@ export function App({ initialEvents = [], onSubmit = defaultSubmit }: Props) {
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Text>Contexa v1</Text>
-      <Text color="gray">CLI-only coding assistant skeleton</Text>
+      <Header sessionId="local" />
       <Box marginTop={1} flexDirection="column">
-        <TranscriptView events={events} />
+        <MessageList messages={messages} isLoading={isLoading} />
       </Box>
       <Box marginTop={1} flexDirection="column">
-        <PermissionDialog />
+        <PermissionDialog pendingRequest={pendingPermissionRequest} />
+      </Box>
+      <Box marginTop={1}>
+        <StatusLine
+          isLoading={isLoading}
+          hasPendingPermission={pendingPermissionRequest !== null}
+        />
       </Box>
       <Box marginTop={1}>
         <PromptInput

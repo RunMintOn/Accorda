@@ -25,6 +25,30 @@ describe('interactive app', () => {
             type: 'assistant_text',
             payload: { text: `echo: ${text}` },
           },
+          {
+            id: 'evt-tool',
+            sessionId: 'session-test',
+            timestamp: '2026-04-11T00:00:02.000Z',
+            type: 'tool_call',
+            payload: {
+              toolCallId: 'call-1',
+              name: 'read',
+              input: { path: 'package.json' },
+              layer: 'real',
+            },
+          },
+          {
+            id: 'evt-tool-result',
+            sessionId: 'session-test',
+            timestamp: '2026-04-11T00:00:03.000Z',
+            type: 'tool_result',
+            payload: {
+              toolCallId: 'call-1',
+              name: 'read',
+              ok: true,
+              output: 'package.json',
+            },
+          },
         ]}
       />,
     )
@@ -38,5 +62,10 @@ describe('interactive app', () => {
 
     expect(lastFrame()).toContain('hello')
     expect(lastFrame()).toContain('echo: hello')
+    expect(lastFrame()).toContain('Accorda')
+    expect(lastFrame()).toContain('ready')
+    expect(lastFrame()).toContain('read')
+    expect(lastFrame()).toContain('package.json')
+    expect(lastFrame()).toContain('No pending permission request.')
   })
 })
