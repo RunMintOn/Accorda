@@ -48,7 +48,11 @@ describe('runLocalTurn', () => {
       type: 'user_message',
       payload: { text: 'hello' },
     })
-    expect(events[1]).toMatchObject({
+    const providerStatus = events.find(
+      event =>
+        event.type === 'system_status' && event.payload.source === 'provider',
+    )
+    expect(providerStatus).toMatchObject({
       type: 'system_status',
       payload: {
         stage: 'answering',
@@ -63,7 +67,7 @@ describe('runLocalTurn', () => {
         finishReason: 'stop',
       },
     })
-    expect(events[2]).toMatchObject({
+    expect(events.at(-1)).toMatchObject({
       type: 'assistant_text',
       payload: { text: 'hello back' },
     })
@@ -84,7 +88,10 @@ describe('runLocalTurn', () => {
     })
 
     const events = await runLocalTurn('session-1', 'hello')
-    const statusEvent = events.find(event => event.type === 'system_status')
+    const statusEvent = events.find(
+      event =>
+        event.type === 'system_status' && event.payload.source === 'provider',
+    )
 
     expect(statusEvent).toBeDefined()
     expect(statusEvent?.payload.stage).toBe('answering')
@@ -97,8 +104,13 @@ describe('runLocalTurn', () => {
     })
 
     const events = await runLocalTurn('session-1', 'hello')
+    const configStatus = events.find(
+      event =>
+        event.type === 'system_status' && event.payload.source === 'config',
+    )
+    const answer = events.find(event => event.type === 'assistant_text')
 
-    expect(events[1]).toMatchObject({
+    expect(configStatus).toMatchObject({
       type: 'system_status',
       payload: {
         stage: 'error',
@@ -108,13 +120,13 @@ describe('runLocalTurn', () => {
         message: 'Missing CONTEXTA_API_KEY',
       },
     })
-    expect(events[2]).toMatchObject({
+    expect(answer).toMatchObject({
       type: 'assistant_text',
       payload: {
         text: 'Provider unavailable. Check configuration and try again.',
       },
     })
-    expect(events[2]?.payload).not.toEqual({ text: 'echo: hello' })
+    expect(answer?.payload).not.toEqual({ text: 'echo: hello' })
   })
 
   it('persists events to a caller-provided event log path', async () => {
