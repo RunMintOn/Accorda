@@ -1,7 +1,7 @@
 import type {
   ProviderResultMetadata,
   RuntimeStatusPayload,
-} from '../core/contracts'
+} from '../core/contracts.js'
 
 export type StageOneDecision =
   | {
@@ -12,9 +12,21 @@ export type StageOneDecision =
       metadata?: ProviderResultMetadata
     }
   | {
-      kind: 'tool'
-      name: 'clarify' | 'proceed'
-      input: Record<string, unknown>
+      kind: 'execute'
+      reason?: string
+      status?: RuntimeStatusPayload
+      metadata?: ProviderResultMetadata
+    }
+  | {
+      kind: 'clarify'
+      question: string
+      reason?: string
+      status?: RuntimeStatusPayload
+      metadata?: ProviderResultMetadata
+    }
+  | {
+      kind: 'task_mode'
+      summary: string
       reason?: string
       status?: RuntimeStatusPayload
       metadata?: ProviderResultMetadata
