@@ -21,6 +21,16 @@ export function createRuntimeEngine(deps: EngineDeps) {
           ),
           returnedToStageOne: false,
           finalText: stageOne.text,
+          status:
+            stageOne.status ??
+            {
+              message: 'Answer ready',
+              level: 'info',
+              stage: 'answering',
+              reason: stageOne.reason ?? 'stage_one_direct_answer',
+              source: 'stage_one',
+            },
+          metadata: stageOne.metadata,
         }
       }
 
@@ -32,6 +42,16 @@ export function createRuntimeEngine(deps: EngineDeps) {
           ),
           returnedToStageOne: false,
           finalText: String(stageOne.input.uncertainty ?? ''),
+          status:
+            stageOne.status ??
+            {
+              message: 'Clarification needed',
+              level: 'info',
+              stage: 'answering',
+              reason: stageOne.reason ?? 'stage_one_clarify_request',
+              source: 'stage_one',
+            },
+          metadata: stageOne.metadata,
         }
       }
 
@@ -45,6 +65,16 @@ export function createRuntimeEngine(deps: EngineDeps) {
         returnedToStageOne: true,
         finalText: stageTwo.finalText,
         events: stageTwo.events,
+        status:
+          stageTwo.status ??
+          {
+            message: 'Execution entered',
+            level: 'info',
+            stage: 'executing',
+            reason: stageTwo.reason ?? stageOne.reason ?? 'entered_execution_layer',
+            source: 'stage_two',
+          },
+        metadata: stageTwo.metadata,
       }
     },
   }

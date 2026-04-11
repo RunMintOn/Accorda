@@ -18,6 +18,12 @@ function event(
   }
 }
 
+function omitUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>
+}
+
 export async function runLocalTurn(
   sessionId: string,
   text: string,
@@ -38,15 +44,50 @@ export async function runLocalTurn(
           },
           { role: 'user', content: text },
         ])
-        return { kind: 'answer', text: answer || '(empty response)' }
-      } catch {
-        return { kind: 'answer', text: `echo: ${text}` }
+        return {
+          kind: 'answer',
+          text: answer.text || '(empty response)',
+          reason: 'stage_one_direct_answer',
+          status: {
+            message: 'Provider answered successfully',
+            level: 'info',
+            stage: 'answering',
+            reason: 'stage_one_direct_answer',
+            source: 'provider',
+          },
+          metadata: omitUndefined({
+            usage: answer.usage,
+            model: answer.model,
+            finishReason: answer.finishReason,
+            toolCalls: answer.toolCalls,
+            raw: answer.raw,
+          }),
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown provider failure'
+
+        return {
+          kind: 'answer',
+          text: 'Provider unavailable. Check configuration and try again.',
+          reason: 'provider_or_config_error',
+          status: {
+            message,
+            level: 'error',
+            stage: 'error',
+            reason: 'provider_or_config_error',
+            source: message.startsWith('Missing CONTEXTA_') ? 'config' : 'provider',
+          },
+        }
       }
     },
     runStageTwo: async () => ({ events: [] }),
   })
 
   const result = await engine.runTurn(sessionId, text)
+  if (result.status) {
+    events.push(event(sessionId, 'system_status', { ...result.status, ...result.metadata }))
+  }
   if (result.finalText) {
     events.push(event(sessionId, 'assistant_text', { text: result.finalText }))
   }

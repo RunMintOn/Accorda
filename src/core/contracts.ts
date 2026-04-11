@@ -33,6 +33,20 @@ export type RuntimeStatusPayload = {
   source?: RuntimeStatusSource
 }
 
+export type ProviderUsage = {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
+
+export type ProviderResultMetadata = {
+  usage?: ProviderUsage
+  model?: string
+  finishReason?: string
+  toolCalls?: unknown[]
+  raw?: unknown
+}
+
 export type EventRecord = {
   id: string
   sessionId: string
@@ -70,4 +84,6 @@ export type RuntimeTurnResult = {
   returnedToStageOne: boolean
   finalText?: string
   events?: RuntimeEventDraft[]
+  status?: RuntimeStatusPayload
+  metadata?: ProviderResultMetadata
 }

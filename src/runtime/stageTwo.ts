@@ -1,9 +1,15 @@
-import type { RuntimeEventDraft } from '../core/contracts'
+import type {
+  ProviderResultMetadata,
+  RuntimeEventDraft,
+  RuntimeStatusPayload,
+} from '../core/contracts'
 
 export type StageTwoResult = {
   events: RuntimeEventDraft[]
   finalText?: string
   reason?: string
+  status?: RuntimeStatusPayload
+  metadata?: ProviderResultMetadata
 }
 
 export type StageTwoRunner = (input: {
