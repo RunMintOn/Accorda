@@ -116,4 +116,50 @@ describe('runLocalTurn', () => {
     })
     expect(events[2]?.payload).not.toEqual({ text: 'echo: hello' })
   })
+
+  it('persists events to a caller-provided event log path', async () => {
+    const { mkdtemp, readFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = await mkdtemp(join(tmpdir(), 'accorda-run-local-turn-'))
+
+    try {
+      loadConfig.mockReturnValue({
+        provider: {
+          baseURL: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'gpt-4.1-mini',
+        },
+        workspaceRoot: dir,
+      })
+      createTextCompletion.mockResolvedValue({
+        text: 'logged answer',
+        model: 'gpt-4.1-mini',
+      })
+
+      const eventLogPath = join(dir, 'events.jsonl')
+      const events = await runLocalTurn('session-log', 'hello', {
+        eventLogPath,
+        artifactDir: join(dir, 'artifacts'),
+        workspaceRoot: dir,
+      })
+
+      const raw = await readFile(eventLogPath, 'utf8')
+      const persisted = raw
+        .split('\n')
+        .filter(Boolean)
+        .map(line => JSON.parse(line))
+
+      expect(persisted.map(event => event.type)).toEqual(
+        events.map(event => event.type),
+      )
+      expect(persisted[0]).toMatchObject({
+        sessionId: 'session-log',
+        type: 'user_message',
+        payload: { text: 'hello' },
+      })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

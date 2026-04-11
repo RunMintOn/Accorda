@@ -1,96 +1,110 @@
-import { randomUUID } from 'node:crypto'
-import { loadConfig } from '../core/config'
-import type { EventRecord } from '../core/contracts'
-import { createTextCompletion } from '../provider/openaiClient'
-import { createRuntimeEngine } from './engine'
+import { loadConfig } from '../core/config.js'
+import type { EventRecord } from '../core/contracts.js'
+import { createTextCompletion } from '../provider/openaiClient.js'
+import { createEventLogStore } from '../store/eventLogStore.js'
+import {
+  createAgentRuntime,
+  type RuntimeProvider,
+} from './agentRuntime.js'
 
-function event(
-  sessionId: string,
-  type: EventRecord['type'],
-  payload: Record<string, unknown>,
-): EventRecord {
+type LocalRuntime = ReturnType<typeof createAgentRuntime>
+
+export type RunLocalTurnOptions = {
+  eventLogPath?: string
+  artifactDir?: string
+  workspaceRoot?: string
+}
+
+const runtimes = new Map<string, LocalRuntime>()
+
+function providerMessageForCompletion(message: {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content: string
+}): { role: 'system' | 'user' | 'assistant'; content: string } {
+  if (message.role === 'tool') {
+    return {
+      role: 'user',
+      content: `Tool result:\n${message.content}`,
+    }
+  }
+
   return {
-    id: randomUUID(),
-    sessionId,
-    timestamp: new Date().toISOString(),
-    type,
-    payload,
+    role: message.role,
+    content: message.content,
   }
 }
 
-function omitUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as Partial<T>
+function createDefaultProvider(): RuntimeProvider {
+  return async ({ messages }) => {
+    try {
+      const config = loadConfig()
+      const answer = await createTextCompletion(
+        config,
+        messages.map(providerMessageForCompletion),
+      )
+
+      return {
+        ...answer,
+        status: {
+          message: 'Provider answered successfully',
+          level: 'info',
+          stage: 'answering',
+          reason: 'stage_one_direct_answer',
+          source: 'provider',
+        },
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown provider failure'
+
+      return {
+        text: 'Provider unavailable. Check configuration and try again.',
+        status: {
+          message,
+          level: 'error',
+          stage: 'error',
+          reason: 'provider_or_config_error',
+          source: message.startsWith('Missing CONTEXTA_')
+            ? 'config'
+            : 'provider',
+        },
+      }
+    }
+  }
+}
+
+function createRuntime(
+  sessionId: string,
+  options: RunLocalTurnOptions = {},
+) {
+  return createAgentRuntime({
+    sessionId,
+    workspaceRoot: options.workspaceRoot,
+    artifactDir: options.artifactDir,
+    eventStore: options.eventLogPath
+      ? createEventLogStore(options.eventLogPath)
+      : undefined,
+    provider: createDefaultProvider(),
+  })
+}
+
+function getRuntime(sessionId: string) {
+  const existing = runtimes.get(sessionId)
+  if (existing) return existing
+
+  const runtime = createRuntime(sessionId)
+  runtimes.set(sessionId, runtime)
+  return runtime
 }
 
 export async function runLocalTurn(
   sessionId: string,
   text: string,
+  options: RunLocalTurnOptions = {},
 ): Promise<EventRecord[]> {
-  const events: EventRecord[] = [
-    event(sessionId, 'user_message', { text }),
-  ]
-
-  const engine = createRuntimeEngine({
-    runStageOne: async () => {
-      try {
-        const config = loadConfig()
-        const answer = await createTextCompletion(config, [
-          {
-            role: 'system',
-            content:
-              'You are Accorda, a minimal CLI coding assistant. Answer concisely.',
-          },
-          { role: 'user', content: text },
-        ])
-        return {
-          kind: 'answer',
-          text: answer.text || '(empty response)',
-          reason: 'stage_one_direct_answer',
-          status: {
-            message: 'Provider answered successfully',
-            level: 'info',
-            stage: 'answering',
-            reason: 'stage_one_direct_answer',
-            source: 'provider',
-          },
-          metadata: omitUndefined({
-            usage: answer.usage,
-            model: answer.model,
-            finishReason: answer.finishReason,
-            toolCalls: answer.toolCalls,
-            raw: answer.raw,
-          }),
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Unknown provider failure'
-
-        return {
-          kind: 'answer',
-          text: 'Provider unavailable. Check configuration and try again.',
-          reason: 'provider_or_config_error',
-          status: {
-            message,
-            level: 'error',
-            stage: 'error',
-            reason: 'provider_or_config_error',
-            source: message.startsWith('Missing CONTEXTA_') ? 'config' : 'provider',
-          },
-        }
-      }
-    },
-    runStageTwo: async () => ({ events: [] }),
-  })
-
-  const result = await engine.runTurn(sessionId, text)
-  if (result.status) {
-    events.push(event(sessionId, 'system_status', { ...result.status, ...result.metadata }))
-  }
-  if (result.finalText) {
-    events.push(event(sessionId, 'assistant_text', { text: result.finalText }))
+  if (options.eventLogPath || options.artifactDir || options.workspaceRoot) {
+    return createRuntime(sessionId, options).run(text)
   }
 
-  return events
+  return getRuntime(sessionId).run(text)
 }
