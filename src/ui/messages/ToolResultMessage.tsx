@@ -1,5 +1,6 @@
 import React from 'react'
-import { Box, Text } from 'ink'
+import { Text } from 'ink'
+import { MessageResponse } from '../claudeChrome/MessageResponse'
 import type { RenderableMessage } from './types'
 
 type Props = {
@@ -20,11 +21,10 @@ export function ToolResultMessage({ message }: Props) {
   const content = message.ok ? compactValue(message.output) : message.error
 
   return (
-    <Box flexDirection="row" marginLeft={2}>
-      <Text color={message.ok ? 'green' : 'red'} bold>
-        {message.ok ? 'Done' : 'Error'} {message.name}
+    <MessageResponse>
+      <Text color={message.ok ? 'gray' : 'red'}>
+        {content || (message.ok ? `${message.name} completed` : `${message.name} failed`)}
       </Text>
-      {content ? <Text color="gray">  output: {content}</Text> : null}
-    </Box>
+    </MessageResponse>
   )
 }

@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Text } from 'ink'
+import { ToolUseDot } from '../claudeChrome/ToolUseDot'
 import type { RenderableMessage } from './types'
 
 type Props = {
@@ -14,16 +15,22 @@ function compactJson(value: unknown): string {
   }
 }
 
+function renderSummary(name: string, input: unknown): string {
+  if (input && typeof input === 'object' && 'path' in input) {
+    return String((input as { path: unknown }).path)
+  }
+  if (input && typeof input === 'object' && 'command' in input) {
+    return String((input as { command: unknown }).command)
+  }
+  return compactJson(input)
+}
+
 export function ToolCallMessage({ message }: Props) {
   return (
-    <Box flexDirection="column" marginLeft={2}>
-      <Box flexDirection="row">
-        <Text color={message.layer === 'control' ? 'yellow' : 'magenta'} bold>
-          Tool {message.name}
-        </Text>
-        <Text color="gray">  {message.layer} layer</Text>
-      </Box>
-      <Text color="gray">input: {compactJson(message.input)}</Text>
+    <Box flexDirection="row" marginTop={1}>
+      <ToolUseDot status="running" />
+      <Text bold>{message.name}</Text>
+      <Text color="gray">({renderSummary(message.name, message.input)})</Text>
     </Box>
   )
 }

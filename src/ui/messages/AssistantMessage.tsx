@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Text } from 'ink'
+import { ToolUseDot } from '../claudeChrome/ToolUseDot'
 import type { RenderableMessage } from './types'
 
 type Props = {
@@ -8,14 +9,9 @@ type Props = {
 
 export function AssistantMessage({ message }: Props) {
   return (
-    <Box flexDirection="row">
-      <Text color="green">
-        {'*'}{' '}
-      </Text>
-      <Text color="green" bold>
-        Accorda
-      </Text>
-      <Text>  {message.text}</Text>
+    <Box flexDirection="row" marginTop={1}>
+      <ToolUseDot />
+      <Text>{message.text}</Text>
     </Box>
   )
 }

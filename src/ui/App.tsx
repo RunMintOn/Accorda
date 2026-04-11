@@ -6,7 +6,6 @@ import { projectEventsToMessages } from './events/projectEvents'
 import { Header } from './components/Header'
 import { PermissionDialog } from './components/PermissionDialog'
 import { PromptInput } from './components/PromptInput'
-import { StatusLine } from './components/StatusLine'
 import { MessageList } from './messages/MessageList'
 
 type Props = {
@@ -47,15 +46,7 @@ export function App({ initialEvents = [], onSubmit = defaultSubmit }: Props) {
       <Box flexDirection="column">
         <MessageList messages={messages} isLoading={isLoading} />
       </Box>
-      <Box flexDirection="column">
-        <PermissionDialog pendingRequest={pendingPermissionRequest} />
-      </Box>
-      <Box>
-        <StatusLine
-          isLoading={isLoading}
-          hasPendingPermission={pendingPermissionRequest !== null}
-        />
-      </Box>
+      <PermissionDialog pendingRequest={pendingPermissionRequest} />
       <Box>
         <PromptInput
           value={input}

@@ -11,16 +11,16 @@ type Props = {
 }
 
 export function PermissionDialog({ pendingRequest = null }: Props) {
+  if (!pendingRequest) {
+    return null
+  }
+
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="yellow" paddingX={1}>
       <Text color="yellow">Permission gate</Text>
-      {pendingRequest ? (
-        <Text>
-          {pendingRequest.toolName} requires permission {JSON.stringify(pendingRequest.input)}
-        </Text>
-      ) : (
-        <Text color="gray">No pending permission request.</Text>
-      )}
+      <Text>
+        {pendingRequest.toolName} requires permission {JSON.stringify(pendingRequest.input)}
+      </Text>
     </Box>
   )
 }

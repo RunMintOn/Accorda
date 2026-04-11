@@ -51,22 +51,26 @@ export function PromptInput({ value, isLoading, onChange, onSubmit }: Props) {
   }, [onChange, onSubmit, stdin])
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={isLoading ? 'yellow' : 'cyan'}
-      paddingX={1}
-    >
-      <Text color="gray">
-        Ask Accorda. Press Enter to send. Ctrl+C to exit.
-      </Text>
-      <Box>
-        <Text color="cyan">{'> '}</Text>
-        <Text color={value ? undefined : 'gray'}>
-          {isLoading
-            ? 'Thinking...'
-            : value || 'Describe a task or ask a question'}
+    <Box flexDirection="column" marginTop={1}>
+      <Box
+        flexDirection="row"
+        alignItems="flex-start"
+        borderStyle="round"
+        borderColor={isLoading ? 'yellow' : 'green'}
+        borderLeft={false}
+        borderRight={false}
+        borderBottom
+        width="100%"
+      >
+        <Text color="green" dimColor={isLoading}>
+          {'❯ '}
         </Text>
+        <Text color={value ? undefined : 'gray'}>
+          {isLoading ? 'Thinking...' : value || 'Ask Accorda to work on this codebase'}
+        </Text>
+      </Box>
+      <Box paddingX={2}>
+        <Text color="gray">? for shortcuts · shift+tab to cycle mode · ctrl+c to exit</Text>
       </Box>
     </Box>
   )
