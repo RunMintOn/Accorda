@@ -26,6 +26,20 @@ describe('interactive app', () => {
             payload: { text: `echo: ${text}` },
           },
           {
+            id: 'evt-status',
+            sessionId: 'session-test',
+            timestamp: '2026-04-11T00:00:01.500Z',
+            type: 'system_status',
+            payload: {
+              message: 'Provider answered successfully',
+              level: 'info',
+              stage: 'answering',
+              reason: 'stage_one_direct_answer',
+              source: 'provider',
+              model: 'gpt-4.1-mini',
+            },
+          },
+          {
             id: 'evt-tool',
             sessionId: 'session-test',
             timestamp: '2026-04-11T00:00:02.000Z',
@@ -71,12 +85,16 @@ describe('interactive app', () => {
     expect(lastFrame()).toContain('shift+tab to cycle mode')
     expect(lastFrame()).toContain('ctrl+c to exit')
     expect(lastFrame()).not.toContain('Ask Accorda. Press Enter to send.')
-    expect(lastFrame()).not.toContain('status ready')
+    expect(lastFrame()).toContain('status: answering')
+    expect(lastFrame()).toContain('stage_one_direct_answer')
+    expect(lastFrame()).toContain('context: unknown')
+    expect(lastFrame()).toContain('source: provider')
     expect(lastFrame()).toContain('● read')
     expect(lastFrame()).toContain('(package.json)')
     expect(lastFrame()).toContain('⎿  package.json')
     expect(lastFrame()).not.toContain('Permission gate')
     expect(lastFrame()).not.toContain('No pending permission request.')
     expect(lastFrame()).toContain('Ask Accorda')
+    expect(lastFrame()).not.toContain('● Thinking...')
   })
 })

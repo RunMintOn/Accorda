@@ -51,4 +51,11 @@ describe('MessageList', () => {
     expect(lastFrame()).not.toContain('Tool read')
     expect(lastFrame()).not.toContain('Done read')
   })
+
+  it('does not rely on a generic thinking spinner when no explicit status message is provided', () => {
+    const { lastFrame } = render(<MessageList messages={[]} isLoading={true} />)
+
+    expect(lastFrame()).toContain('Try "summarize this repo" or "read package.json".')
+    expect(lastFrame()).not.toContain('● Thinking...')
+  })
 })
