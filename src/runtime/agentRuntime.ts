@@ -11,6 +11,11 @@ import {
   type ReadOnlyToolHandler,
   type ReadOnlyToolName,
 } from '../tools/readOnly.js'
+import {
+  controlDecisionStatus,
+  defaultControlDecision,
+  type ControlDecisionRunner,
+} from './controlDecision.js'
 
 export type ProviderMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -37,6 +42,7 @@ export type AgentRuntimeOptions = {
   contextPersistRatio?: number
   toolResultPersistBytes?: number
   tools?: Partial<Record<ReadOnlyToolName, ReadOnlyToolHandler>>
+  controlDecision?: ControlDecisionRunner
   now?: () => Date
   id?: () => string
 }
@@ -82,6 +88,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const now = options.now ?? (() => new Date())
   const id = options.id ?? randomUUID
   const tools = { ...createReadOnlyTools(workspaceRoot), ...options.tools }
+  const decideControl = options.controlDecision ?? defaultControlDecision
 
   let history: EventRecord[] = []
   let initialized = false
@@ -179,7 +186,38 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const events: EventRecord[] = []
     await append(events, createEvent('user_message', { text: userText }))
 
-    const toolRequest = parseReadOnlyToolRequest(userText)
+    const controlDecision = await decideControl({ sessionId, userText })
+    const controlStatus = controlDecisionStatus(controlDecision)
+    await append(
+      events,
+      createEvent('system_status', {
+        ...controlStatus,
+        controlDecision: controlDecision.kind,
+      }),
+    )
+
+    if (controlDecision.kind === 'clarify') {
+      await append(
+        events,
+        createEvent('assistant_text', { text: controlDecision.question }),
+      )
+      await persistContextSnapshot(events)
+      return events
+    }
+
+    if (controlDecision.kind === 'task_mode') {
+      await append(
+        events,
+        createEvent('assistant_text', {
+          text: `Task Mode selected: ${controlDecision.summary}`,
+        }),
+      )
+      await persistContextSnapshot(events)
+      return events
+    }
+
+    const toolRequest =
+      controlDecision.kind === 'execute' ? parseReadOnlyToolRequest(userText) : null
     if (toolRequest) {
       const toolCallId = id()
       await append(

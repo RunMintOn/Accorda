@@ -147,4 +147,151 @@ describe('agent runtime', () => {
       await rm(workspaceRoot, { recursive: true, force: true })
     }
   })
+
+  it('logs clarify decisions and returns the question without calling the provider', async () => {
+    let providerCalled = false
+    const runtime = createAgentRuntime({
+      controlDecision: async () => ({
+        kind: 'clarify',
+        question: 'Which file should I inspect?',
+        reason: 'stage_one_clarify_request',
+      }),
+      provider: async () => {
+        providerCalled = true
+        return { text: 'provider answer' }
+      },
+    })
+
+    const events = await runtime.run('check it')
+
+    expect(providerCalled).toBe(false)
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'system_status',
+        payload: expect.objectContaining({
+          stage: 'routing',
+          reason: 'stage_one_clarify_request',
+          controlDecision: 'clarify',
+        }),
+      }),
+    )
+    expect(events.at(-1)).toMatchObject({
+      type: 'assistant_text',
+      payload: { text: 'Which file should I inspect?' },
+    })
+  })
+
+  it('logs Task Mode decisions without calling the provider', async () => {
+    let providerCalled = false
+    const runtime = createAgentRuntime({
+      controlDecision: async () => ({
+        kind: 'task_mode',
+        summary: 'Inspect tests and propose a fix',
+        reason: 'stage_one_task_mode',
+      }),
+      provider: async () => {
+        providerCalled = true
+        return { text: 'provider answer' }
+      },
+    })
+
+    const events = await runtime.run('fix the tests')
+
+    expect(providerCalled).toBe(false)
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'system_status',
+        payload: expect.objectContaining({
+          stage: 'routing',
+          reason: 'stage_one_task_mode',
+          controlDecision: 'task_mode',
+        }),
+      }),
+    )
+    expect(events.at(-1)).toMatchObject({
+      type: 'assistant_text',
+      payload: {
+        text: 'Task Mode selected: Inspect tests and propose a fix',
+      },
+    })
+  })
+
+  it('uses execute decisions to run read-only tools before provider answers', async () => {
+    const workspaceRoot = await tempRuntimeDir()
+    try {
+      await writeFile(join(workspaceRoot, 'note.txt'), 'hello from note')
+      const runtime = createAgentRuntime({
+        workspaceRoot,
+        controlDecision: async () => ({
+          kind: 'execute',
+          reason: 'stage_one_execute',
+        }),
+        provider: async () => ({ text: 'tool result inspected' }),
+      })
+
+      const events = await runtime.run('read note.txt')
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: 'system_status',
+          payload: expect.objectContaining({
+            stage: 'routing',
+            reason: 'stage_one_execute',
+            controlDecision: 'execute',
+          }),
+        }),
+      )
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: 'tool_result',
+          payload: expect.objectContaining({
+            name: 'read',
+            ok: true,
+            output: 'hello from note',
+          }),
+        }),
+      )
+      expect(events.at(-1)).toMatchObject({
+        type: 'assistant_text',
+        payload: { text: 'tool result inspected' },
+      })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not run tools when the first layer selects direct answer', async () => {
+    const workspaceRoot = await tempRuntimeDir()
+    try {
+      await writeFile(join(workspaceRoot, 'note.txt'), 'hello from note')
+      const runtime = createAgentRuntime({
+        workspaceRoot,
+        controlDecision: async () => ({
+          kind: 'answer',
+          reason: 'stage_one_direct_answer',
+        }),
+        provider: async () => ({ text: 'direct provider answer' }),
+      })
+
+      const events = await runtime.run('read note.txt')
+
+      expect(events.some(event => event.type === 'tool_call')).toBe(false)
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: 'system_status',
+          payload: expect.objectContaining({
+            stage: 'routing',
+            reason: 'stage_one_direct_answer',
+            controlDecision: 'answer',
+          }),
+        }),
+      )
+      expect(events.at(-1)).toMatchObject({
+        type: 'assistant_text',
+        payload: { text: 'direct provider answer' },
+      })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
 })
