@@ -1,9 +1,12 @@
-import type { RuntimeState } from '../core/contracts'
+import type { RuntimeStage, RuntimeState } from '../core/contracts'
 
-export function createRuntimeState(): RuntimeState {
+export function createRuntimeState(
+  stage: RuntimeStage = 'idle',
+  reason = 'ready_for_input',
+): RuntimeState {
   return {
-    isLoading: false,
-    inStageTwo: false,
+    stage,
+    reason,
     streamingText: '',
     pendingPermissionRequest: null,
   }

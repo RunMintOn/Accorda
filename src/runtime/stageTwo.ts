@@ -1,8 +1,9 @@
+import type { RuntimeEventDraft } from '../core/contracts'
+
 export type StageTwoResult = {
-  events: Array<{
-    type: string
-    payload: Record<string, unknown>
-  }>
+  events: RuntimeEventDraft[]
+  finalText?: string
+  reason?: string
 }
 
 export type StageTwoRunner = (input: {
