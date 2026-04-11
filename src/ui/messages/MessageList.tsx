@@ -8,7 +8,7 @@ type Props = {
   isLoading: boolean
 }
 
-export function MessageList({ messages, isLoading }: Props) {
+export function MessageList({ messages, isLoading: _isLoading }: Props) {
   return (
     <Box flexDirection="column">
       {messages.length === 0 ? (
@@ -20,11 +20,6 @@ export function MessageList({ messages, isLoading }: Props) {
           <MessageRow key={message.id} message={message} />
         ))
       )}
-      {isLoading ? (
-        <Box marginTop={1}>
-          <Text color="gray">● Thinking...</Text>
-        </Box>
-      ) : null}
     </Box>
   )
 }
