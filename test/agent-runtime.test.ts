@@ -68,8 +68,9 @@ describe('agent runtime', () => {
 
     const events = await runtime.run('hello')
 
-    expect(calls[0]?.slice(0, 2)).toEqual([
+    expect(calls[0]?.slice(0, 3)).toEqual([
       'system:You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+      'system:Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
       'system:Be brief. Lead with the conclusion.',
     ])
     expect(events).toContainEqual(
@@ -356,8 +357,9 @@ describe('agent runtime', () => {
 
       const events = await runtime.run('read note.txt')
 
-      expect(calls[0]?.slice(0, 2)).toEqual([
+      expect(calls[0]?.slice(0, 3)).toEqual([
         'system:You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+        'system:Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
         'system:Be brief. Lead with the conclusion.',
       ])
       expect(events).toContainEqual(

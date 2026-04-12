@@ -156,11 +156,16 @@ describe('runLocalTurn', () => {
     await runLocalTurn('session-brief', 'hello')
 
     expect(createTextCompletion).toHaveBeenCalledTimes(1)
-    expect(createTextCompletion.mock.calls[0]?.[1].slice(0, 2)).toEqual([
+    expect(createTextCompletion.mock.calls[0]?.[1].slice(0, 3)).toEqual([
       {
         role: 'system',
         content:
           'You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+      },
+      {
+        role: 'system',
+        content:
+          'Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
       },
       {
         role: 'system',
@@ -307,6 +312,13 @@ describe('runLocalTurn', () => {
         model: 'gpt-4.1-mini',
         messages: expect.any(Array),
       })
+      expect(
+        request.body.messages.some(
+          (message: { role: string; content: string }) =>
+            message.role === 'system' &&
+            message.content.includes('Tools: ls, read, glob, grep'),
+        ),
+      ).toBe(true)
       expect(request.body).not.toHaveProperty('apiKey')
       expect(response.body).toMatchObject({
         text: 'logged answer',

@@ -207,6 +207,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         content:
           'You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
       },
+      {
+        role: 'system',
+        content:
+          'Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
+      },
     ]
 
     if (responsePolicy) {
