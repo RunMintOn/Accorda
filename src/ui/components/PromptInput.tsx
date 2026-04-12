@@ -1,64 +1,38 @@
 import React from 'react'
-import { Box, Text, useStdin } from 'ink'
+import { Box, Text } from 'ink'
 
 type Props = {
   value: string
+  cursor: number
   isLoading: boolean
-  onChange(value: string): void
-  onSubmit(value?: string): void
+  mode?: 'compose' | 'resume_select'
 }
 
-export function PromptInput({ value, isLoading, onChange, onSubmit }: Props) {
-  const valueRef = React.useRef(value)
-  valueRef.current = value
-  const loadingRef = React.useRef(isLoading)
-  loadingRef.current = isLoading
-  const { stdin } = useStdin()
+function renderCursor(value: string, cursor: number) {
+  return `${value.slice(0, cursor)}|${value.slice(cursor)}`
+}
 
-  React.useEffect(() => {
-    function onData(data: Buffer | string) {
-      if (loadingRef.current) return
-
-      const input = String(data)
-      if (input.includes('\r') || input.includes('\n')) {
-        const text = input.replace(/[\r\n]/g, '')
-        const nextValue = valueRef.current + text
-        if (text) {
-          onChange(nextValue)
-        }
-        onSubmit(nextValue)
-        return
-      }
-      if (input === '\r' || input === '\n') {
-        onSubmit(valueRef.current)
-        return
-      }
-      if (input === '\u007F' || input === '\b') {
-        onChange(valueRef.current.slice(0, -1))
-        return
-      }
-
-      const text = input.replace(/[\r\n]/g, '')
-      if (text) {
-        onChange(valueRef.current + text)
-      }
-    }
-
-    stdin.on('data', onData)
-    return () => {
-      stdin.off('data', onData)
-    }
-  }, [onChange, onSubmit, stdin])
+export function PromptInput({
+  value,
+  cursor,
+  isLoading,
+  mode = 'compose',
+}: Props) {
+  const placeholder =
+    mode === 'resume_select'
+      ? 'Type a session number'
+      : 'Try "create a util logging.py that..."'
+  const displayValue = value ? renderCursor(value, cursor) : placeholder
 
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box borderStyle="single" borderColor={isLoading ? 'yellow' : 'gray'} width="100%">
         <Text color={value ? undefined : 'gray'}>
-          {isLoading ? 'Working...' : value || 'Try "create a util logging.py that..."'}
+          {isLoading ? 'Working...' : displayValue}
         </Text>
       </Box>
       <Box paddingX={1}>
-        <Text color="gray">Press Enter to send · ctrl+c to exit</Text>
+        <Text color="gray">Enter: newline · Ctrl+Enter: submit · ctrl+c to exit</Text>
       </Box>
     </Box>
   )
