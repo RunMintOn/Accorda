@@ -209,6 +209,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const controlStatus = controlDecisionStatus(controlDecision)
     await append(
       events,
+      createEvent('runtime_decision', {
+        layer: 'stage_one',
+        decision: controlDecision.kind,
+        reason: controlDecision.reason ?? `stage_one_${controlDecision.kind}`,
+        responsePolicyId: responsePolicyPayload.responsePolicyId,
+        responsePolicyMode: responsePolicyPayload.responsePolicyMode,
+        responseStyle: responsePolicyPayload.responseStyle,
+      }),
+    )
+    await append(
+      events,
       createEvent('system_status', {
         ...controlStatus,
         controlDecision: controlDecision.kind,

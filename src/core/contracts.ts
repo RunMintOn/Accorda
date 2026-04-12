@@ -1,8 +1,13 @@
 export type EventType =
+  | 'session_started'
   | 'user_message'
+  | 'runtime_decision'
+  | 'model_call_started'
+  | 'model_call_finished'
   | 'tool_call'
   | 'tool_result'
   | 'assistant_text'
+  | 'runtime_error'
   | 'system_status'
 
 export type RuntimeStage =

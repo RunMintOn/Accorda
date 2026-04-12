@@ -85,6 +85,29 @@ describe('agent runtime', () => {
     )
   })
 
+  it('emits a runtime_decision event for the stage one choice', async () => {
+    const runtime = createAgentRuntime({
+      controlDecision: async () => ({
+        kind: 'answer',
+        reason: 'stage_one_direct_answer',
+      }),
+      provider: async () => ({ text: 'direct answer' }),
+    })
+
+    const events = await runtime.run('hello')
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'runtime_decision',
+        payload: expect.objectContaining({
+          layer: 'stage_one',
+          decision: 'answer',
+          reason: 'stage_one_direct_answer',
+        }),
+      }),
+    )
+  })
+
   it('persists tool results larger than the configured threshold', async () => {
     const artifactDir = await tempRuntimeDir()
     try {
