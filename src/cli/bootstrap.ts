@@ -33,6 +33,10 @@ function printHelp(stdout: (value: string) => void) {
   commandHelpLines('cli').forEach(line => stdout(`  ${line}`))
 }
 
+function createSessionId(now: Date = new Date()) {
+  return `session-${now.toISOString().replace(/[:.]/g, '-')}`
+}
+
 async function promptForSelection() {
   const readline = createInterface({
     input: defaultStdin,
@@ -90,7 +94,7 @@ export async function runCli(
     return 0
   }
 
-  const app = renderApp({})
+  const app = renderApp({ initialSessionId: createSessionId() })
   await app.waitUntilExit()
   return 0
 }

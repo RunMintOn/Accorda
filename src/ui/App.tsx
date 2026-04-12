@@ -14,7 +14,10 @@ import {
   listRecentSessions,
   loadSessionEvents,
 } from '../commands/recentSessions'
-import { runLocalTurn } from '../runtime/defaultRunner'
+import {
+  runLocalTurn,
+  type RunLocalTurnOptions,
+} from '../runtime/defaultRunner'
 import { projectEventsToRenderableItems } from './events/projectRenderableItems'
 import { Header } from './components/Header'
 import { PermissionDialog } from './components/PermissionDialog'
@@ -33,14 +36,19 @@ import {
 async function defaultSubmit(
   text: string,
   sessionId: string,
+  options: RunLocalTurnOptions,
 ): Promise<EventRecord[]> {
-  return runLocalTurn(sessionId, text)
+  return runLocalTurn(sessionId, text, options)
 }
 
 type Props = {
   initialEvents?: EventRecord[]
   initialSessionId?: string
-  onSubmit?: (text: string, sessionId: string) => Promise<EventRecord[]>
+  onSubmit?: (
+    text: string,
+    sessionId: string,
+    options: RunLocalTurnOptions,
+  ) => Promise<EventRecord[]>
   listRecentSessions?: typeof listRecentSessions
   loadSessionEvents?: typeof loadSessionEvents
 }
@@ -106,6 +114,14 @@ function latestRuntimeStatus(events: EventRecord[]): RuntimeStatusView | null {
 
 function runsDir() {
   return join(cwd(), '.accorda', 'runs')
+}
+
+function runOptions(sessionId: string): RunLocalTurnOptions {
+  return {
+    eventLogPath: join(runsDir(), sessionId, 'events.jsonl'),
+    artifactDir: join(runsDir(), sessionId, 'artifacts'),
+    workspaceRoot: cwd(),
+  }
 }
 
 export function App({
@@ -245,7 +261,11 @@ export function App({
       }),
     )
     try {
-      const nextEvents = await onSubmit(text, sessionIdRef.current)
+      const nextEvents = await onSubmit(
+        text,
+        sessionIdRef.current,
+        runOptions(sessionIdRef.current),
+      )
       setEvents(current => [...current, ...nextEvents])
       const nextStatus = latestRuntimeStatus(nextEvents)
       if (nextStatus) {

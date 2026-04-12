@@ -60,5 +60,5 @@ export async function createTextCompletion(
   return createTextCompletionFromBody(config, {
     model: config.provider.model,
     messages,
-  }
+  })
 }
