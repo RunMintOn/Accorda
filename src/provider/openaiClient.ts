@@ -6,6 +6,11 @@ export type ProviderTextResult = {
   text: string
 } & ProviderResultMetadata
 
+export type ChatCompletionBody = {
+  model: string
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+}
+
 export function createOpenAICompatibleClient(config: AppConfig) {
   return new OpenAI({
     apiKey: config.provider.apiKey,
@@ -13,16 +18,13 @@ export function createOpenAICompatibleClient(config: AppConfig) {
   })
 }
 
-export async function createTextCompletion(
-  config: AppConfig,
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-): Promise<ProviderTextResult> {
-  const client = createOpenAICompatibleClient(config)
-  const completion = await client.chat.completions.create({
-    model: config.provider.model,
-    messages,
-  })
-
+function providerResultFromCompletion(
+  completion: Awaited<
+    ReturnType<
+      ReturnType<typeof createOpenAICompatibleClient>['chat']['completions']['create']
+    >
+  >,
+): ProviderTextResult {
   const choice = completion.choices[0]
 
   return {
@@ -38,5 +40,25 @@ export async function createTextCompletion(
         }
       : undefined,
     raw: completion,
+  }
+}
+
+export async function createTextCompletionFromBody(
+  config: AppConfig,
+  body: ChatCompletionBody,
+): Promise<ProviderTextResult> {
+  const client = createOpenAICompatibleClient(config)
+  const completion = await client.chat.completions.create(body)
+
+  return providerResultFromCompletion(completion)
+}
+
+export async function createTextCompletion(
+  config: AppConfig,
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+): Promise<ProviderTextResult> {
+  return createTextCompletionFromBody(config, {
+    model: config.provider.model,
+    messages,
   }
 }

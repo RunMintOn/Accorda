@@ -29,9 +29,21 @@ export type ProviderMessage = {
 }
 
 export type RuntimeProvider = (input: {
+  callId: string
   messages: ProviderMessage[]
   toolNames: ReadOnlyToolName[]
-}) => Promise<ProviderTextResult & { status?: RuntimeStatusPayload }>
+  recordModelRequest(value: unknown): Promise<string>
+  recordModelResponse(value: unknown): Promise<string>
+}) => Promise<
+  ProviderTextResult & {
+    status?: RuntimeStatusPayload
+    trace?: {
+      callId: string
+      requestArtifact?: string
+      responseArtifact?: string
+    }
+  }
+>
 
 type EventStore = {
   append(event: EventRecord): Promise<void>
@@ -176,6 +188,18 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     )
   }
 
+  async function writeModelCallArtifact(
+    callId: string,
+    kind: 'request' | 'response',
+    value: unknown,
+  ) {
+    const modelCallsDir = join(artifactDir, 'model-calls')
+    await mkdir(modelCallsDir, { recursive: true })
+    const artifactPath = join(modelCallsDir, `${callId}.${kind}.json`)
+    await writeFile(artifactPath, JSON.stringify(value, null, 2), 'utf8')
+    return artifactPath
+  }
+
   function providerMessages(responsePolicy: ResponsePolicy | null) {
     const messages: ProviderMessage[] = [
       {
@@ -296,9 +320,48 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       }
     }
 
+    const callId = id()
+    const messages = providerMessages(responsePolicy)
+    const toolNames = READ_ONLY_TOOL_NAMES
+    const layer = controlDecision.kind === 'execute' ? 'stage_two' : 'stage_one'
     const result = await options.provider({
-      messages: providerMessages(responsePolicy),
-      toolNames: READ_ONLY_TOOL_NAMES,
+      callId,
+      messages,
+      toolNames,
+      recordModelRequest: async value => {
+        const requestArtifact = await writeModelCallArtifact(
+          callId,
+          'request',
+          value,
+        )
+        await append(
+          events,
+          createEvent('model_call_started', {
+            callId,
+            layer,
+            requestArtifact,
+            messageCount: messages.length,
+            toolNames,
+          }),
+        )
+        return requestArtifact
+      },
+      recordModelResponse: async value => {
+        const responseArtifact = await writeModelCallArtifact(
+          callId,
+          'response',
+          value,
+        )
+        await append(
+          events,
+          createEvent('model_call_finished', {
+            callId,
+            ok: true,
+            responseArtifact,
+          }),
+        )
+        return responseArtifact
+      },
     })
 
     const providerStatus =

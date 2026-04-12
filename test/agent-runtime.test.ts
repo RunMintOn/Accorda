@@ -108,6 +108,66 @@ describe('agent runtime', () => {
     )
   })
 
+  it('emits model call started and finished events around provider calls', async () => {
+    const runtime = createAgentRuntime({
+      id: (() => {
+        const ids = [
+          'evt-user',
+          'evt-decision',
+          'evt-status',
+          'call-1',
+          'evt-started',
+          'evt-finished',
+          'evt-provider',
+          'evt-answer',
+        ]
+        return () => ids.shift() ?? 'evt-extra'
+      })(),
+      provider: async ({
+        callId,
+        messages,
+        toolNames,
+        recordModelRequest,
+        recordModelResponse,
+      }) => {
+        const requestArtifact = await recordModelRequest({
+          body: { model: 'test-model', messages, toolNames },
+        })
+        const responseArtifact = await recordModelResponse({
+          body: { text: 'hello back' },
+        })
+        return {
+          text: 'hello back',
+          model: 'test-model',
+          trace: { callId, requestArtifact, responseArtifact },
+        }
+      },
+    })
+
+    const events = await runtime.run('hello')
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'model_call_started',
+        payload: expect.objectContaining({
+          callId: 'call-1',
+          requestArtifact: expect.any(String),
+          messageCount: expect.any(Number),
+        }),
+      }),
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'model_call_finished',
+        payload: expect.objectContaining({
+          callId: 'call-1',
+          ok: true,
+          responseArtifact: expect.any(String),
+        }),
+      }),
+    )
+  })
+
   it('persists tool results larger than the configured threshold', async () => {
     const artifactDir = await tempRuntimeDir()
     try {

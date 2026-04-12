@@ -1,6 +1,6 @@
 import { loadConfig } from '../core/config.js'
 import type { EventRecord } from '../core/contracts.js'
-import { createTextCompletion } from '../provider/openaiClient.js'
+import { createTextCompletionFromBody } from '../provider/openaiClient.js'
 import { createEventLogStore } from '../store/eventLogStore.js'
 import {
   createAgentRuntime,
@@ -35,16 +35,36 @@ function providerMessageForCompletion(message: {
 }
 
 function createDefaultProvider(): RuntimeProvider {
-  return async ({ messages }) => {
+  return async ({
+    callId,
+    messages,
+    recordModelRequest,
+    recordModelResponse,
+  }) => {
     try {
       const config = loadConfig()
-      const answer = await createTextCompletion(
-        config,
-        messages.map(providerMessageForCompletion),
-      )
+      const body = {
+        model: config.provider.model,
+        messages: messages.map(providerMessageForCompletion),
+      }
+      const timestamp = new Date().toISOString()
+      const requestArtifact = await recordModelRequest({
+        schemaVersion: 1,
+        callId,
+        timestamp,
+        body,
+      })
+      const answer = await createTextCompletionFromBody(config, body)
+      const responseArtifact = await recordModelResponse({
+        schemaVersion: 1,
+        callId,
+        timestamp: new Date().toISOString(),
+        body: answer,
+      })
 
       return {
         ...answer,
+        trace: { callId, requestArtifact, responseArtifact },
         status: {
           message: 'Provider answered successfully',
           level: 'info',

@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { loadConfig, createTextCompletion } = vi.hoisted(() => ({
-  loadConfig: vi.fn(),
-  createTextCompletion: vi.fn(),
-}))
+const { loadConfig, createTextCompletion, createTextCompletionFromBody } =
+  vi.hoisted(() => ({
+    loadConfig: vi.fn(),
+    createTextCompletion: vi.fn(),
+    createTextCompletionFromBody: vi.fn(),
+  }))
 
 vi.mock('../src/core/config', () => ({
   loadConfig,
@@ -11,6 +13,7 @@ vi.mock('../src/core/config', () => ({
 
 vi.mock('../src/provider/openaiClient', () => ({
   createTextCompletion,
+  createTextCompletionFromBody,
 }))
 
 import { runLocalTurn } from '../src/runtime/defaultRunner'
@@ -19,6 +22,10 @@ describe('runLocalTurn', () => {
   beforeEach(() => {
     loadConfig.mockReset()
     createTextCompletion.mockReset()
+    createTextCompletionFromBody.mockReset()
+    createTextCompletionFromBody.mockImplementation((config, body) =>
+      createTextCompletion(config, body.messages),
+    )
   })
 
   it('preserves provider metadata in system status events when usage is present', async () => {
@@ -202,6 +209,60 @@ describe('runLocalTurn', () => {
         sessionId: 'session-log',
         type: 'user_message',
         payload: { text: 'hello' },
+      })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('persists the exact API body and provider response as model call artifacts', async () => {
+    const { mkdtemp, readFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = await mkdtemp(join(tmpdir(), 'accorda-model-call-'))
+
+    try {
+      loadConfig.mockReturnValue({
+        provider: {
+          baseURL: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'gpt-4.1-mini',
+        },
+        workspaceRoot: dir,
+      })
+      createTextCompletionFromBody.mockResolvedValue({
+        text: 'logged answer',
+        model: 'gpt-4.1-mini',
+        raw: { id: 'completion-1' },
+      })
+
+      const events = await runLocalTurn('session-log', 'hello', {
+        eventLogPath: join(dir, 'events.jsonl'),
+        artifactDir: join(dir, 'artifacts'),
+        workspaceRoot: dir,
+      })
+
+      const started = events.find(
+        event => event.type === 'model_call_started',
+      )
+      const finished = events.find(
+        event => event.type === 'model_call_finished',
+      )
+      const request = JSON.parse(
+        await readFile(String(started?.payload.requestArtifact), 'utf8'),
+      )
+      const response = JSON.parse(
+        await readFile(String(finished?.payload.responseArtifact), 'utf8'),
+      )
+
+      expect(request.body).toMatchObject({
+        model: 'gpt-4.1-mini',
+        messages: expect.any(Array),
+      })
+      expect(request.body).not.toHaveProperty('apiKey')
+      expect(response.body).toMatchObject({
+        text: 'logged answer',
+        raw: { id: 'completion-1' },
       })
     } finally {
       await rm(dir, { recursive: true, force: true })
