@@ -1,11 +1,11 @@
-import React from 'react'
-import { render } from 'ink'
-import { App } from './ui/App'
+import { runCli } from './cli/bootstrap'
 
-export function main() {
-  return render(<App />)
+export async function main() {
+  return runCli(process.argv.slice(2))
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main()
+  main().then(code => {
+    process.exitCode = code
+  })
 }
