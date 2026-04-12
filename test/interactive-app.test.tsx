@@ -3,17 +3,24 @@ import { render } from 'ink-testing-library'
 import { describe, expect, it } from 'vitest'
 import { App } from '../src/ui/App'
 describe('interactive app', () => {
-  it('renders multi-line input text without auto-submitting on Enter', async () => {
-    const { stdin, lastFrame } = render(<App onSubmit={async () => []} />)
+  it('submits input on Enter', async () => {
+    const submissions: string[] = []
+    const { stdin } = render(
+      <App
+        onSubmit={async text => {
+          submissions.push(text)
+          return []
+        }}
+      />,
+    )
 
+    await new Promise(resolve => setTimeout(resolve, 0))
     stdin.write('a')
+    await new Promise(resolve => setTimeout(resolve, 0))
     stdin.write('\r')
-    stdin.write('b')
 
     await new Promise(resolve => setTimeout(resolve, 50))
 
-    expect(lastFrame()).toContain('a')
-    expect(lastFrame()).toContain('b')
-    expect(lastFrame()).not.toContain('Waiting for runtime result')
+    expect(submissions).toEqual(['a'])
   })
 })

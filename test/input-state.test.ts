@@ -40,8 +40,8 @@ describe('inputState', () => {
 })
 
 describe('parseKeyBuffer', () => {
-  it('maps enter to newline and ctrl+enter to submit', () => {
-    expect(parseKeyBuffer(Buffer.from([13]))).toEqual({ type: 'newline' })
+  it('maps enter to submit', () => {
+    expect(parseKeyBuffer(Buffer.from([13]))).toEqual({ type: 'submit' })
     expect(parseKeyBuffer(Buffer.from([27, 13]))).toEqual({ type: 'submit' })
   })
 

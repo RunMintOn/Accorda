@@ -3,7 +3,7 @@ import type { InputAction } from './inputState'
 export function parseKeyBuffer(buffer: Buffer): InputAction | null {
   const bytes = Array.from(buffer)
 
-  if (bytes.length === 1 && bytes[0] === 13) return { type: 'newline' }
+  if (bytes.length === 1 && bytes[0] === 13) return { type: 'submit' }
   if (bytes.length === 2 && bytes[0] === 27 && bytes[1] === 13) {
     return { type: 'submit' }
   }
