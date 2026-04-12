@@ -54,4 +54,8 @@ describe('parseKeyBuffer', () => {
     })
     expect(parseKeyBuffer(Buffer.from([127]))).toEqual({ type: 'backspace' })
   })
+
+  it('ignores ctrl-c instead of inserting it into the prompt', () => {
+    expect(parseKeyBuffer(Buffer.from([3]))).toBeNull()
+  })
 })

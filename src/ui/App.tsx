@@ -22,6 +22,7 @@ import { PromptInput } from './components/PromptInput'
 import type { RuntimeStatusView } from './components/RuntimeStatus'
 import { applyInputAction, createInputState } from './input/inputState'
 import { parseKeyBuffer } from './input/keyParser'
+import { enableRawMode } from './input/rawMode'
 import { MessageList } from './messages/MessageList'
 import {
   matchSlashCommands,
@@ -114,7 +115,7 @@ export function App({
   listRecentSessions: listRecentSessionsProp = listRecentSessions,
   loadSessionEvents: loadSessionEventsProp = loadSessionEvents,
 }: Props) {
-  const { stdin } = useStdin()
+  const { stdin, setRawMode, isRawModeSupported } = useStdin()
   const [events, setEvents] = React.useState<EventRecord[]>(initialEvents)
   const [inputState, setInputState] = React.useState(createInputState())
   const [isLoading, setIsLoading] = React.useState(false)
@@ -255,6 +256,11 @@ export function App({
       setInputStateSynced(createInputState())
     }
   }
+
+  React.useEffect(
+    () => enableRawMode({ isRawModeSupported, setRawMode }),
+    [isRawModeSupported, setRawMode],
+  )
 
   React.useEffect(() => {
     function onData(data: Buffer | string) {

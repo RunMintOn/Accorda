@@ -26,6 +26,7 @@ export function parseKeyBuffer(buffer: Buffer): InputAction | null {
   if (bytes.length === 1 && (bytes[0] === 127 || bytes[0] === 8)) {
     return { type: 'backspace' }
   }
+  if (bytes.length === 1 && bytes[0] === 3) return null
 
   const text = buffer.toString('utf8')
   if (text) return { type: 'insert', text }
