@@ -1,10 +1,10 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { ToolUseDot } from '../claudeChrome/ToolUseDot'
-import type { RenderableMessage } from './types'
+import type { RenderableItem } from './types'
 
 type Props = {
-  message: Extract<RenderableMessage, { kind: 'assistant' }>
+  message: Extract<RenderableItem, { kind: 'assistant' }>
 }
 
 export function AssistantMessage({ message }: Props) {

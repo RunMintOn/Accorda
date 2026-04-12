@@ -8,7 +8,7 @@ import type {
   RuntimeStatusPayload,
 } from '../core/contracts'
 import { runLocalTurn } from '../runtime/defaultRunner'
-import { projectEventsToMessages } from './events/projectEvents'
+import { projectEventsToRenderableItems } from './events/projectRenderableItems'
 import { Header } from './components/Header'
 import { PermissionDialog } from './components/PermissionDialog'
 import { PromptInput } from './components/PromptInput'
@@ -93,7 +93,10 @@ export function App({ initialEvents = [], onSubmit = defaultSubmit }: Props) {
   const pendingPermissionRequest = null
   const inputRef = React.useRef(input)
   inputRef.current = input
-  const messages = React.useMemo(() => projectEventsToMessages(events), [events])
+  const messages = React.useMemo(
+    () => projectEventsToRenderableItems(events),
+    [events],
+  )
   const runtimeStatus = React.useMemo(
     () =>
       latestRuntimeStatus(events) ??

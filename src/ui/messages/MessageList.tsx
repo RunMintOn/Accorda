@@ -1,10 +1,10 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { MessageRow } from './MessageRow'
-import type { RenderableMessage } from './types'
+import type { RenderableItem } from './types'
 
 type Props = {
-  messages: RenderableMessage[]
+  messages: RenderableItem[]
   isLoading: boolean
 }
 

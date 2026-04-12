@@ -1,9 +1,9 @@
 import React from 'react'
 import { Box, Text } from 'ink'
-import type { RenderableMessage } from './types'
+import type { RenderableItem } from './types'
 
 type Props = {
-  message: Extract<RenderableMessage, { kind: 'user' }>
+  message: Extract<RenderableItem, { kind: 'user' }>
 }
 
 export function UserMessage({ message }: Props) {

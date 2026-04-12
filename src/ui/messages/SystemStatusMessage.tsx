@@ -1,9 +1,9 @@
 import React from 'react'
 import { Box, Text } from 'ink'
-import type { RenderableMessage } from './types'
+import type { RenderableItem } from './types'
 
 type Props = {
-  message: Extract<RenderableMessage, { kind: 'system' }>
+  message: Extract<RenderableItem, { kind: 'system' }>
 }
 
 function colorForLevel(level: 'info' | 'warning' | 'error') {
