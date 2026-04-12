@@ -324,6 +324,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const messages = providerMessages(responsePolicy)
     const toolNames = READ_ONLY_TOOL_NAMES
     const layer = controlDecision.kind === 'execute' ? 'stage_two' : 'stage_one'
+    let requestArtifactPath: string | undefined
+    let modelCallFinished = false
     const result = await options.provider({
       callId,
       messages,
@@ -334,6 +336,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           'request',
           value,
         )
+        requestArtifactPath = requestArtifact
         await append(
           events,
           createEvent('model_call_started', {
@@ -360,6 +363,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             responseArtifact,
           }),
         )
+        modelCallFinished = true
         return responseArtifact
       },
     })
@@ -373,6 +377,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         reason: 'agent_runtime_answer',
         source: 'provider',
       } satisfies RuntimeStatusPayload)
+
+    if (!modelCallFinished && requestArtifactPath) {
+      await append(
+        events,
+        createEvent('model_call_finished', {
+          callId,
+          ok: providerStatus.level !== 'error',
+          requestArtifact: requestArtifactPath,
+          error:
+            providerStatus.level === 'error' ? providerStatus.message : undefined,
+          usage: result.usage,
+          model: result.model,
+          finishReason: result.finishReason,
+        }),
+      )
+      modelCallFinished = true
+    }
 
     await append(
       events,
