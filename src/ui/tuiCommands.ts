@@ -1,5 +1,5 @@
 import type { EventRecord } from '../core/contracts'
-import { commandHelpLines } from '../commands/registry'
+import { COMMANDS, commandHelpLines } from '../commands/registry'
 import {
   listRecentSessions,
   loadSessionEvents,
@@ -24,6 +24,11 @@ export type TuiCommandResult =
   | { kind: 'resume_prompt'; mode: AppMode; event: EventRecord }
   | { kind: 'resume_loaded'; sessionId: string; events: EventRecord[]; mode: AppMode }
   | { kind: 'resume_invalid'; event: EventRecord }
+
+export type SlashCandidate = {
+  name: string
+  description: string
+}
 
 function createSessionId(now: Date = new Date()) {
   return `session-${now.toISOString().replace(/[:.]/g, '-')}`
@@ -75,6 +80,18 @@ function invalidResumeEvent(sessionId: string, now: Date): EventRecord {
       reason: 'invalid_resume_selection',
     },
   }
+}
+
+export function matchSlashCommands(input: string): SlashCandidate[] {
+  if (!input.startsWith('/')) return []
+
+  const query = input.slice(1).trim().toLowerCase()
+  return COMMANDS.filter(command =>
+    command.tuiSyntax.slice(1).startsWith(query),
+  ).map(command => ({
+    name: command.name,
+    description: command.description,
+  }))
 }
 
 export async function resolveTuiCommand(

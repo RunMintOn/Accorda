@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EventRecord } from '../src/core/contracts'
-import { resolveTuiCommand } from '../src/ui/tuiCommands'
+import { matchSlashCommands, resolveTuiCommand } from '../src/ui/tuiCommands'
 
 describe('resolveTuiCommand', () => {
   const now = () => new Date('2026-04-12T13:00:00.000Z')
@@ -83,5 +83,19 @@ describe('resolveTuiCommand', () => {
       events,
       mode: { kind: 'compose' },
     })
+  })
+})
+
+describe('matchSlashCommands', () => {
+  it('returns slash candidates immediately when input starts with slash text', () => {
+    expect(matchSlashCommands('/')).toEqual([
+      { name: 'new', description: 'start a new session' },
+      { name: 'resume', description: 'resume a recent session' },
+      { name: 'help', description: 'show available commands' },
+    ])
+
+    expect(matchSlashCommands('/re')).toEqual([
+      { name: 'resume', description: 'resume a recent session' },
+    ])
   })
 })
