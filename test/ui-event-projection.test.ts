@@ -71,6 +71,30 @@ describe('projectEventsToRenderableItems', () => {
     ])
   })
 
+  it('keeps model call trace events visible but compact', () => {
+    const events: EventRecord[] = [
+      {
+        ...base,
+        id: 'evt-start',
+        type: 'model_call_started',
+        payload: {
+          callId: 'call-1',
+          layer: 'stage_one',
+          messageCount: 2,
+          toolNames: ['answer', 'execute'],
+          requestArtifact: 'artifacts/model-calls/call-1.request.json',
+        },
+      },
+    ]
+
+    expect(projectEventsToRenderableItems(events)).toContainEqual(
+      expect.objectContaining({
+        kind: 'system',
+        message: expect.stringContaining('model call'),
+      }),
+    )
+  })
+
   it('turns malformed payloads into system warnings', () => {
     const events: EventRecord[] = [
       {

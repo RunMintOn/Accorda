@@ -63,4 +63,40 @@ describe('recent sessions', () => {
       }),
     ).toEqual(events)
   })
+
+  it('uses the last user message for previews when trace events are present', async () => {
+    const events: EventRecord[] = [
+      {
+        id: 'evt-trace',
+        sessionId: 'traced',
+        timestamp: '2026-04-12T12:00:00.000Z',
+        type: 'model_call_started',
+        payload: { callId: 'call-1' },
+      },
+      {
+        id: 'evt-user',
+        sessionId: 'traced',
+        timestamp: '2026-04-12T12:00:01.000Z',
+        type: 'user_message',
+        payload: { text: 'real prompt' },
+      },
+      {
+        id: 'evt-finished',
+        sessionId: 'traced',
+        timestamp: '2026-04-12T12:00:02.000Z',
+        type: 'model_call_finished',
+        payload: { callId: 'call-1', ok: true },
+      },
+    ]
+
+    const sessions = await listRecentSessions('/tmp/accorda-runs', {
+      listRunDirectories: async () => ['traced'],
+      readSessionEvents: async () => events,
+    })
+
+    expect(sessions[0]).toMatchObject({
+      sessionId: 'traced',
+      preview: 'real prompt',
+    })
+  })
 })

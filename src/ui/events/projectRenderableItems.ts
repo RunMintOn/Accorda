@@ -35,6 +35,12 @@ function systemWarning(event: EventRecord, message: string): RenderableItem {
   }
 }
 
+function compactList(value: unknown): string {
+  if (!Array.isArray(value)) return 'none'
+  const strings = value.filter(item => typeof item === 'string')
+  return strings.length ? strings.join(', ') : 'none'
+}
+
 export function projectEventsToRenderableItems(
   events: EventRecord[],
 ): RenderableItem[] {
@@ -95,6 +101,45 @@ export function projectEventsToRenderableItems(
                 timestamp: event.timestamp,
               },
         )
+        break
+      }
+      case 'runtime_decision': {
+        const { layer, decision, reason } = event.payload
+        items.push(
+          typeof layer !== 'string' ||
+            typeof decision !== 'string' ||
+            typeof reason !== 'string'
+            ? systemWarning(event, `Malformed runtime_decision event: ${event.id}`)
+            : {
+                id: event.id,
+                kind: 'system',
+                level: 'info',
+                message: `${layer}: ${reason} - selected ${decision}`,
+                timestamp: event.timestamp,
+              },
+        )
+        break
+      }
+      case 'model_call_started': {
+        const { layer, messageCount, toolNames } = event.payload
+        items.push({
+          id: event.id,
+          kind: 'system',
+          level: 'info',
+          message: `model call ${String(layer ?? 'unknown')}: ${String(messageCount ?? 'unknown')} messages · tools ${compactList(toolNames)}`,
+          timestamp: event.timestamp,
+        })
+        break
+      }
+      case 'model_call_finished': {
+        const { ok, callId } = event.payload
+        items.push({
+          id: event.id,
+          kind: 'system',
+          level: ok === false ? 'error' : 'info',
+          message: `model call finished: ${String(callId ?? 'unknown')} · ${ok === false ? 'error' : 'ok'}`,
+          timestamp: event.timestamp,
+        })
         break
       }
       case 'tool_call': {
