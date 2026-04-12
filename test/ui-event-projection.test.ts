@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { projectEventsToMessages } from '../src/ui/events/projectEvents'
+import { projectEventsToRenderableItems } from '../src/ui/events/projectRenderableItems'
 import type { EventRecord } from '../src/core/contracts'
 
 const base = {
@@ -7,23 +7,17 @@ const base = {
   timestamp: '2026-04-11T00:00:00.000Z',
 }
 
-describe('projectEventsToMessages', () => {
-  it('projects session events into TUI renderable messages', () => {
+describe('projectEventsToRenderableItems', () => {
+  it('merges tool_call and tool_result into one tool step item', () => {
     const events: EventRecord[] = [
       {
         ...base,
-        id: 'evt-user',
-        type: 'user_message',
-        payload: { text: 'list files' },
-      },
-      {
-        ...base,
-        id: 'evt-tool',
+        id: 'evt-call',
         type: 'tool_call',
         payload: {
           toolCallId: 'call-1',
-          name: 'ls',
-          input: { path: '.' },
+          name: 'read',
+          input: { path: 'package.json' },
           layer: 'real',
         },
       },
@@ -33,48 +27,45 @@ describe('projectEventsToMessages', () => {
         type: 'tool_result',
         payload: {
           toolCallId: 'call-1',
-          name: 'ls',
+          name: 'read',
           ok: true,
-          output: 'package.json',
+          output: '{"name":"accorda"}',
         },
-      },
-      {
-        ...base,
-        id: 'evt-assistant',
-        type: 'assistant_text',
-        payload: { text: 'Found package.json.' },
       },
     ]
 
-    expect(projectEventsToMessages(events)).toEqual([
+    expect(projectEventsToRenderableItems(events)).toContainEqual({
+      id: 'call-1',
+      kind: 'tool_step',
+      toolName: 'read',
+      title: 'Read package.json',
+      status: 'ok',
+      summary: 'Read file',
+      timestamp: base.timestamp,
+    })
+  })
+
+  it('keeps system status separate from tool step items', () => {
+    const events: EventRecord[] = [
       {
-        id: 'evt-user',
-        kind: 'user',
-        text: 'list files',
-        timestamp: base.timestamp,
+        ...base,
+        id: 'evt-status',
+        type: 'system_status',
+        payload: {
+          message: 'Routing to execute',
+          level: 'info',
+          stage: 'routing',
+          reason: 'stage_one_execute',
+        },
       },
+    ]
+
+    expect(projectEventsToRenderableItems(events)).toEqual([
       {
-        id: 'evt-tool',
-        kind: 'tool_call',
-        toolCallId: 'call-1',
-        name: 'ls',
-        input: { path: '.' },
-        layer: 'real',
-        timestamp: base.timestamp,
-      },
-      {
-        id: 'evt-result',
-        kind: 'tool_result',
-        toolCallId: 'call-1',
-        name: 'ls',
-        ok: true,
-        output: 'package.json',
-        timestamp: base.timestamp,
-      },
-      {
-        id: 'evt-assistant',
-        kind: 'assistant',
-        text: 'Found package.json.',
+        id: 'evt-status',
+        kind: 'system',
+        level: 'info',
+        message: 'routing: stage_one_execute - Routing to execute',
         timestamp: base.timestamp,
       },
     ])
@@ -90,7 +81,7 @@ describe('projectEventsToMessages', () => {
       },
     ]
 
-    expect(projectEventsToMessages(events)).toEqual([
+    expect(projectEventsToRenderableItems(events)).toEqual([
       {
         id: 'evt-bad',
         kind: 'system',
