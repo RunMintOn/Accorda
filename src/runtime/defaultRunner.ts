@@ -1,7 +1,10 @@
+import { dirname } from 'node:path'
+import { cwd } from 'node:process'
 import { loadConfig } from '../core/config.js'
 import type { EventRecord } from '../core/contracts.js'
 import { createTextCompletionFromBody } from '../provider/openaiClient.js'
 import { createEventLogStore } from '../store/eventLogStore.js'
+import { createSessionStore } from '../store/sessionStore.js'
 import {
   createAgentRuntime,
   type RuntimeProvider,
@@ -117,14 +120,40 @@ function getRuntime(sessionId: string) {
   return runtime
 }
 
+function createPersistentSession(
+  sessionId: string,
+  options: RunLocalTurnOptions,
+) {
+  const runDir = options.eventLogPath
+    ? dirname(options.eventLogPath)
+    : options.artifactDir
+      ? dirname(options.artifactDir)
+      : null
+
+  if (!runDir) return null
+
+  return createSessionStore({
+    runDir,
+    sessionId,
+    workspaceRoot: options.workspaceRoot ?? cwd(),
+  })
+}
+
 export async function runLocalTurn(
   sessionId: string,
   text: string,
   options: RunLocalTurnOptions = {},
 ): Promise<EventRecord[]> {
-  if (options.eventLogPath || options.artifactDir || options.workspaceRoot) {
-    return createRuntime(sessionId, options).run(text)
-  }
+  const persistentSession = createPersistentSession(sessionId, options)
+  await persistentSession?.ensureSession()
 
-  return getRuntime(sessionId).run(text)
+  try {
+    if (options.eventLogPath || options.artifactDir || options.workspaceRoot) {
+      return createRuntime(sessionId, options).run(text)
+    }
+
+    return getRuntime(sessionId).run(text)
+  } finally {
+    await persistentSession?.touchSession()
+  }
 }

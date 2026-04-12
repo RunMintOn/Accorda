@@ -4,7 +4,8 @@ import type { EventRecord } from '../core/contracts'
 import { createEventLogStore } from './eventLogStore'
 
 type CreateSessionStoreOptions = {
-  runsDir: string
+  runsDir?: string
+  runDir?: string
   sessionId: string
   workspaceRoot: string
   now?: () => Date
@@ -12,7 +13,11 @@ type CreateSessionStoreOptions = {
 
 export function createSessionStore(options: CreateSessionStoreOptions) {
   const now = options.now ?? (() => new Date())
-  const runDir = join(options.runsDir, options.sessionId)
+  if (!options.runDir && !options.runsDir) {
+    throw new Error('Session store requires runDir or runsDir')
+  }
+
+  const runDir = options.runDir ?? join(options.runsDir!, options.sessionId)
   const paths = {
     runDir,
     sessionMetaPath: join(runDir, 'session.json'),
@@ -23,32 +28,53 @@ export function createSessionStore(options: CreateSessionStoreOptions) {
   }
   const events = createEventLogStore(paths.eventLogPath)
 
+  function createMeta(createdAt: string, updatedAt = createdAt) {
+    return {
+      schemaVersion: 1,
+      sessionId: options.sessionId,
+      createdAt,
+      updatedAt,
+      workspaceRoot: options.workspaceRoot,
+      mode: 'normal',
+    }
+  }
+
+  async function readMeta() {
+    try {
+      return JSON.parse(await readFile(paths.sessionMetaPath, 'utf8')) as Record<
+        string,
+        unknown
+      >
+    } catch {
+      return null
+    }
+  }
+
+  async function writeMeta(meta: Record<string, unknown>) {
+    await mkdir(runDir, { recursive: true })
+    await writeFile(paths.sessionMetaPath, JSON.stringify(meta, null, 2), 'utf8')
+  }
+
   return {
     paths,
     async ensureSession() {
       await mkdir(runDir, { recursive: true })
-      try {
-        await readFile(paths.sessionMetaPath, 'utf8')
+      const existing = await readMeta()
+      if (existing) {
         return
-      } catch {
-        const timestamp = now().toISOString()
-        await writeFile(
-          paths.sessionMetaPath,
-          JSON.stringify(
-            {
-              schemaVersion: 1,
-              sessionId: options.sessionId,
-              createdAt: timestamp,
-              updatedAt: timestamp,
-              workspaceRoot: options.workspaceRoot,
-              mode: 'normal',
-            },
-            null,
-            2,
-          ),
-          'utf8',
-        )
       }
+
+      const timestamp = now().toISOString()
+      await writeMeta(createMeta(timestamp))
+    },
+    async touchSession() {
+      const timestamp = now().toISOString()
+      const existing = await readMeta()
+      await writeMeta({
+        ...createMeta(timestamp),
+        ...existing,
+        updatedAt: timestamp,
+      })
     },
     async appendEvent(event: EventRecord) {
       await events.append(event)

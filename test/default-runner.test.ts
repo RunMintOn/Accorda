@@ -215,6 +215,54 @@ describe('runLocalTurn', () => {
     }
   })
 
+  it('creates and updates session metadata next to a persisted event log', async () => {
+    const { mkdtemp, readFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = await mkdtemp(join(tmpdir(), 'accorda-run-session-meta-'))
+    const runDir = join(dir, 'session-log')
+    const options = {
+      eventLogPath: join(runDir, 'events.jsonl'),
+      artifactDir: join(runDir, 'artifacts'),
+      workspaceRoot: dir,
+    }
+
+    vi.useFakeTimers()
+    try {
+      loadConfig.mockReturnValue({
+        provider: {
+          baseURL: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'gpt-4.1-mini',
+        },
+        workspaceRoot: dir,
+      })
+      createTextCompletion.mockResolvedValue({
+        text: 'logged answer',
+        model: 'gpt-4.1-mini',
+      })
+
+      vi.setSystemTime(new Date('2026-04-12T00:00:00.000Z'))
+      await runLocalTurn('session-log', 'hello', options)
+      vi.setSystemTime(new Date('2026-04-12T00:05:00.000Z'))
+      await runLocalTurn('session-log', 'again', options)
+
+      expect(
+        JSON.parse(await readFile(join(runDir, 'session.json'), 'utf8')),
+      ).toMatchObject({
+        schemaVersion: 1,
+        sessionId: 'session-log',
+        createdAt: '2026-04-12T00:00:00.000Z',
+        updatedAt: '2026-04-12T00:05:00.000Z',
+        workspaceRoot: dir,
+        mode: 'normal',
+      })
+    } finally {
+      vi.useRealTimers()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('persists the exact API body and provider response as model call artifacts', async () => {
     const { mkdtemp, readFile, rm } = await import('node:fs/promises')
     const { tmpdir } = await import('node:os')
