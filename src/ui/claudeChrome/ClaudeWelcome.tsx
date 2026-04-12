@@ -8,22 +8,16 @@ type Props = {
   model?: string
 }
 
-const WIDTH = 58
-const ART_LINES = [
-  '..........................................................',
-  '     *                                       █████▓▓░     ',
-  '                                 *         ███▓░     ░░   ',
-  '            ░░░░░░                        ███▓░           ',
-  '    ░░░   ░░░░░░░░░░                      ███▓░           ',
-  '   ░░░░░░░░░░░░░░░░░    *                ██▓░░      ▓     ',
-  '                                             ░▓▓███▓▓░    ',
-  ' *                                 ░░░░                   ',
-  '                                 ░░░░░░░░                 ',
-  '      █████████                         *                 ',
-  '      ██▄█████▄██                       *                 ',
-  '      █████████      *                                    ',
-  '.......█ █   █ █..........................................',
-] as const
+const ACCENT = '#e36d3f'
+
+function infoLine(label: string, value: string) {
+  return (
+    <Text>
+      <Text color="gray">{label} </Text>
+      <Text>{value}</Text>
+    </Text>
+  )
+}
 
 export function ClaudeWelcome({ version = 'v0.1.0', model }: Props) {
   const workspace = truncatePath(cwd())
@@ -31,19 +25,24 @@ export function ClaudeWelcome({ version = 'v0.1.0', model }: Props) {
     model ?? process.env.OPENAI_MODEL ?? process.env.ACCORDA_MODEL ?? 'model from env'
 
   return (
-    <Box flexDirection="column" width={WIDTH} marginBottom={1}>
-      <Text>
-        <Text color="green">Welcome to Accorda Code </Text>
-        <Text dimColor>{version}</Text>
-      </Text>
-      {ART_LINES.map((line, index) => (
-        <Text key={index} color={index % 3 === 0 ? 'gray' : undefined}>
-          {line}
-        </Text>
-      ))}
-      <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-        <Text dimColor>cwd: {workspace}</Text>
-        <Text dimColor>provider: OpenAI compatible · {modelLabel}</Text>
+    <Box flexDirection="column" width={92} marginBottom={1}>
+      <Text color={ACCENT}>Accorda Code {version}</Text>
+      <Box borderStyle="round" borderColor={ACCENT} flexDirection="row" paddingX={1} paddingY={1}>
+        <Box flexDirection="column" width={43}>
+          <Text bold>Welcome back!</Text>
+          <Text color={ACCENT} bold>
+            [A]
+          </Text>
+          {infoLine('workspace:', workspace)}
+          {infoLine('provider:', `OpenAI compatible · ${modelLabel}`)}
+        </Box>
+        <Box width={2} />
+        <Box flexDirection="column" flexGrow={1}>
+          <Text color={ACCENT}>Tips for getting started</Text>
+          <Text>Run /init to create repo instructions</Text>
+          <Text color={ACCENT}>Recent activity</Text>
+          <Text color="gray">No recent activity</Text>
+        </Box>
       </Box>
     </Box>
   )

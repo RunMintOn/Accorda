@@ -5,7 +5,7 @@ import { App } from '../src/ui/App'
 import type { EventRecord } from '../src/core/contracts'
 
 describe('interactive app', () => {
-  it('submits user input and shows assistant output', async () => {
+  it('shows the Claude-like shell with Accorda status lines and tool steps', async () => {
     const events: EventRecord[] = []
     const { stdin, lastFrame } = render(
       <App
@@ -76,25 +76,18 @@ describe('interactive app', () => {
 
     expect(lastFrame()).toContain('hello')
     expect(lastFrame()).toContain('echo: hello')
-    expect(lastFrame()).toContain('Welcome to Accorda Code')
-    expect(lastFrame()).toContain('cwd:')
-    expect(lastFrame()).toContain('OpenAI compatible')
-    expect(lastFrame()).not.toContain('OpenAI-compatible CLI agent')
-    expect(lastFrame()).toContain('❯')
-    expect(lastFrame()).toContain('? for shortcuts')
-    expect(lastFrame()).toContain('shift+tab to cycle mode')
-    expect(lastFrame()).toContain('ctrl+c to exit')
-    expect(lastFrame()).not.toContain('Ask Accorda. Press Enter to send.')
+    expect(lastFrame()).toContain('Accorda Code')
+    expect(lastFrame()).toContain('Tips for getting started')
+    expect(lastFrame()).toContain('Recent activity')
     expect(lastFrame()).toContain('status: answering')
     expect(lastFrame()).toContain('stage_one_direct_answer')
-    expect(lastFrame()).toContain('context: unknown')
     expect(lastFrame()).toContain('source: provider')
-    expect(lastFrame()).toContain('● read')
-    expect(lastFrame()).toContain('(package.json)')
-    expect(lastFrame()).toContain('⎿  package.json')
+    expect(lastFrame()).toContain('Read package.json')
+    expect(lastFrame()).toContain('ok')
+    expect(lastFrame()).toContain('Read file')
     expect(lastFrame()).not.toContain('Permission gate')
     expect(lastFrame()).not.toContain('No pending permission request.')
-    expect(lastFrame()).toContain('Ask Accorda')
-    expect(lastFrame()).not.toContain('● Thinking...')
+    expect(lastFrame()).toContain('Try "create a util logging.py that..."')
+    expect(lastFrame()).not.toContain('Ask Accorda to work on this codebase')
   })
 })

@@ -52,25 +52,13 @@ export function PromptInput({ value, isLoading, onChange, onSubmit }: Props) {
 
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Box
-        flexDirection="row"
-        alignItems="flex-start"
-        borderStyle="round"
-        borderColor={isLoading ? 'yellow' : 'green'}
-        borderLeft={false}
-        borderRight={false}
-        borderBottom
-        width="100%"
-      >
-        <Text color="green" dimColor={isLoading}>
-          {'❯ '}
-        </Text>
+      <Box borderStyle="single" borderColor={isLoading ? 'yellow' : 'gray'} width="100%">
         <Text color={value ? undefined : 'gray'}>
-          {isLoading ? 'Thinking...' : value || 'Ask Accorda to work on this codebase'}
+          {isLoading ? 'Working...' : value || 'Try "create a util logging.py that..."'}
         </Text>
       </Box>
-      <Box paddingX={2}>
-        <Text color="gray">? for shortcuts · shift+tab to cycle mode · ctrl+c to exit</Text>
+      <Box paddingX={1}>
+        <Text color="gray">Press Enter to send · ctrl+c to exit</Text>
       </Box>
     </Box>
   )
