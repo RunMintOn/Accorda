@@ -23,7 +23,11 @@ import type { RuntimeStatusView } from './components/RuntimeStatus'
 import { applyInputAction, createInputState } from './input/inputState'
 import { parseKeyBuffer } from './input/keyParser'
 import { MessageList } from './messages/MessageList'
-import { resolveTuiCommand, type AppMode } from './tuiCommands'
+import {
+  matchSlashCommands,
+  resolveTuiCommand,
+  type AppMode,
+} from './tuiCommands'
 
 async function defaultSubmit(
   text: string,
@@ -133,6 +137,10 @@ export function App({
     () => projectEventsToRenderableItems(events),
     [events],
   )
+  const slashCandidates = React.useMemo(
+    () => matchSlashCommands(inputState.value),
+    [inputState.value],
+  )
   const runtimeStatus = React.useMemo(
     () =>
       latestRuntimeStatus(events) ??
@@ -145,6 +153,23 @@ export function App({
         : pendingStatus),
     [events, isLoading, pendingStatus],
   )
+  const promptMode =
+    mode.kind === 'resume_select'
+      ? 'resume_select'
+      : inputState.value.startsWith('/')
+        ? 'command_mode'
+        : 'compose'
+  const helperLines =
+    promptMode === 'command_mode'
+      ? slashCandidates.map(candidate =>
+          `${candidate.name.padEnd(8, ' ')}${candidate.description}`,
+        )
+      : mode.kind === 'resume_select'
+        ? mode.sessions.map(
+            (session, index) =>
+              `${index + 1}. ${session.sessionId}  ${session.preview}`,
+          )
+        : ['Try "read package.json" or start with / for commands']
 
   function setInputStateSynced(nextState: ReturnType<typeof createInputState>) {
     inputStateRef.current = nextState
@@ -288,7 +313,8 @@ export function App({
           value={inputState.value}
           cursor={inputState.cursor}
           isLoading={isLoading}
-          mode={mode.kind}
+          mode={promptMode}
+          helperLines={helperLines}
         />
       </Box>
     </Box>

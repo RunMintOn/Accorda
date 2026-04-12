@@ -1,11 +1,14 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 
+type PromptMode = 'compose' | 'command_mode' | 'resume_select'
+
 type Props = {
   value: string
   cursor: number
   isLoading: boolean
-  mode?: 'compose' | 'resume_select'
+  mode?: PromptMode
+  helperLines?: string[]
 }
 
 function renderInputLine(value: string, cursor: number) {
@@ -13,19 +16,29 @@ function renderInputLine(value: string, cursor: number) {
   return `> ${content}`
 }
 
+function defaultHelper(mode: PromptMode): string[] {
+  if (mode === 'resume_select') return ['Type a session number']
+  return ['Try "read package.json" or start with / for commands']
+}
+
 export function PromptInput({
   value,
   cursor,
   isLoading,
   mode = 'compose',
+  helperLines = defaultHelper(mode),
 }: Props) {
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box borderStyle="single" borderColor={isLoading ? 'yellow' : 'gray'} width="100%">
         <Text>{isLoading ? '> Working...' : renderInputLine(value, cursor)}</Text>
       </Box>
-      <Box paddingX={1}>
-        <Text color="gray">Enter: newline · Ctrl+Enter: submit · ctrl+c to exit</Text>
+      <Box flexDirection="column" paddingX={1}>
+        {helperLines.map((line, index) => (
+          <Text key={index} color="gray">
+            {line}
+          </Text>
+        ))}
       </Box>
     </Box>
   )

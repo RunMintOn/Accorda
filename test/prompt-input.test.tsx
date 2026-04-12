@@ -25,4 +25,33 @@ describe('PromptInput', () => {
 
     expect(lastFrame()).toContain('> read| package')
   })
+
+  it('shows slash candidates below the input line in command mode', () => {
+    const { lastFrame } = render(
+      <PromptInput
+        value="/re"
+        cursor={3}
+        isLoading={false}
+        mode="command_mode"
+        helperLines={['resume   resume a recent session']}
+      />,
+    )
+
+    expect(lastFrame()).toContain('> /re|')
+    expect(lastFrame()).toContain('resume   resume a recent session')
+  })
+
+  it('shows resume options in resume-select mode', () => {
+    const { lastFrame } = render(
+      <PromptInput
+        value=""
+        cursor={0}
+        isLoading={false}
+        mode="resume_select"
+        helperLines={['1. resume-me  restore this one']}
+      />,
+    )
+
+    expect(lastFrame()).toContain('1. resume-me  restore this one')
+  })
 })
