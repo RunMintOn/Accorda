@@ -2,7 +2,10 @@ import { dirname } from 'node:path'
 import { cwd } from 'node:process'
 import { loadConfig } from '../core/config.js'
 import type { EventRecord } from '../core/contracts.js'
-import { createTextCompletionFromBody } from '../provider/openaiClient.js'
+import {
+  createTextCompletionFromBody,
+  type ChatToolDefinition,
+} from '../provider/openaiClient.js'
 import { createEventLogStore } from '../store/eventLogStore.js'
 import { createSessionStore } from '../store/sessionStore.js'
 import {
@@ -43,13 +46,25 @@ function createDefaultProvider(): RuntimeProvider {
     messages,
     recordModelRequest,
     recordModelResponse,
+    tools,
+    toolChoice,
   }) => {
     try {
       const config = loadConfig()
-      const body = {
+      const body: {
+        model: string
+        messages: Array<{
+          role: 'system' | 'user' | 'assistant'
+          content: string
+        }>
+        tools?: ChatToolDefinition[]
+        tool_choice?: 'auto' | 'required'
+      } = {
         model: config.provider.model,
         messages: messages.map(providerMessageForCompletion),
       }
+      if (tools?.length) body.tools = tools
+      if (toolChoice) body.tool_choice = toolChoice
       const timestamp = new Date().toISOString()
       const requestArtifact = await recordModelRequest({
         schemaVersion: 1,

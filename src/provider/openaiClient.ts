@@ -6,9 +6,20 @@ export type ProviderTextResult = {
   text: string
 } & ProviderResultMetadata
 
+export type ChatToolDefinition = {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
+}
+
 export type ChatCompletionBody = {
   model: string
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+  tools?: ChatToolDefinition[]
+  tool_choice?: 'auto' | 'required'
 }
 
 export function createOpenAICompatibleClient(config: AppConfig) {

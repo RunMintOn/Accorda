@@ -3,7 +3,11 @@ import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { cwd } from 'node:process'
 import type { EventRecord, RuntimeStatusPayload } from '../core/contracts.js'
-import type { ProviderTextResult } from '../provider/openaiClient.js'
+import type {
+  ChatToolDefinition,
+  ProviderTextResult,
+} from '../provider/openaiClient.js'
+import { createExecuteToolCatalog } from '../tools/executeCatalog.js'
 import {
   createReadOnlyTools,
   parseReadOnlyToolRequest,
@@ -31,7 +35,9 @@ export type ProviderMessage = {
 export type RuntimeProvider = (input: {
   callId: string
   messages: ProviderMessage[]
-  toolNames: ReadOnlyToolName[]
+  toolNames: string[]
+  tools?: ChatToolDefinition[]
+  toolChoice?: 'auto' | 'required'
   recordModelRequest(value: unknown): Promise<string>
   recordModelResponse(value: unknown): Promise<string>
 }) => Promise<
@@ -93,6 +99,48 @@ function omitUndefined(value: Record<string, unknown>) {
   )
 }
 
+function parseToolArguments(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'string') return {}
+
+  try {
+    const parsed = JSON.parse(value)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return {}
+  }
+
+  return {}
+}
+
+function normalizeProviderToolCalls(
+  toolCalls: unknown,
+): Array<{
+  id: string
+  name: string
+  input: Record<string, unknown>
+}> {
+  if (!Array.isArray(toolCalls)) return []
+
+  return toolCalls.flatMap(toolCall => {
+    if (!toolCall || typeof toolCall !== 'object') return []
+
+    const callId = 'id' in toolCall && typeof toolCall.id === 'string'
+      ? toolCall.id
+      : null
+    const fn = 'function' in toolCall ? toolCall.function : null
+    if (!callId || !fn || typeof fn !== 'object') return []
+
+    const name = 'name' in fn && typeof fn.name === 'string' ? fn.name : null
+    if (!name) return []
+
+    const args = 'arguments' in fn ? fn.arguments : undefined
+
+    return [{ id: callId, name, input: parseToolArguments(args) }]
+  })
+}
+
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const sessionId = options.sessionId ?? 'local'
   const workspaceRoot = options.workspaceRoot ?? cwd()
@@ -106,6 +154,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const now = options.now ?? (() => new Date())
   const id = options.id ?? randomUUID
   const tools = { ...createReadOnlyTools(workspaceRoot), ...options.tools }
+  const executeCatalog = createExecuteToolCatalog(workspaceRoot)
   const decideControl = options.controlDecision ?? defaultControlDecision
 
   let history: EventRecord[] = []
@@ -309,12 +358,28 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const messages = providerMessages(responsePolicy)
     const toolNames = READ_ONLY_TOOL_NAMES
     const layer = controlDecision.kind === 'execute' ? 'stage_two' : 'stage_one'
+    const providerTools =
+      controlDecision.kind === 'execute'
+        ? executeCatalog.definitions.map(tool => ({
+            type: 'function' as const,
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.parameters,
+            },
+          }))
+        : undefined
     let requestArtifactPath: string | undefined
     let modelCallFinished = false
     const result = await options.provider({
       callId,
       messages,
-      toolNames,
+      toolNames:
+        controlDecision.kind === 'execute'
+          ? executeCatalog.definitions.map(tool => tool.name)
+          : toolNames,
+      tools: providerTools,
+      toolChoice: controlDecision.kind === 'execute' ? 'required' : undefined,
       recordModelRequest: async value => {
         const requestArtifact = await writeModelCallArtifact(
           callId,
@@ -352,6 +417,45 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         return responseArtifact
       },
     })
+
+    const providerToolCalls = normalizeProviderToolCalls(result.toolCalls)
+    if (providerToolCalls.length) {
+      for (const toolCall of providerToolCalls) {
+        await append(
+          events,
+          createEvent('tool_call', {
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            input: toolCall.input,
+            layer:
+              toolCall.name === 'ask_user' || toolCall.name === 'finish'
+                ? 'control'
+                : 'real',
+          }),
+        )
+
+        await append(
+          events,
+          createEvent('tool_result', {
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            ok: true,
+            output: toolCall.input,
+          }),
+        )
+
+        if (toolCall.name === 'finish') {
+          await append(
+            events,
+            createEvent('assistant_text', {
+              text: String(toolCall.input.message ?? '(empty response)'),
+            }),
+          )
+          await persistContextSnapshot(events)
+          return events
+        }
+      }
+    }
 
     const providerStatus =
       result.status ??

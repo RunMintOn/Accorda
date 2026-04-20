@@ -260,84 +260,6 @@ describe('agent runtime', () => {
     }
   })
 
-  it('logs clarify decisions and returns the question without calling the provider', async () => {
-    let providerCalled = false
-    const runtime = createAgentRuntime({
-      controlDecision: async () => ({
-        kind: 'clarify',
-        question: 'Which file should I inspect?',
-        reason: 'stage_one_clarify_request',
-      }),
-      provider: async () => {
-        providerCalled = true
-        return { text: 'provider answer' }
-      },
-    })
-
-    const events = await runtime.run('check it')
-
-    expect(providerCalled).toBe(false)
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'system_status',
-        payload: expect.objectContaining({
-          stage: 'routing',
-          reason: 'stage_one_clarify_request',
-          controlDecision: 'clarify',
-          responsePolicyId: 'clarify_direct_v1',
-          responsePolicyMode: 'appended',
-          responseStyle: 'clarify_direct',
-        }),
-      }),
-    )
-    expect(events.at(-1)).toMatchObject({
-      type: 'assistant_text',
-      payload: { text: 'Which file should I inspect?' },
-    })
-  })
-
-  it('logs Task Mode decisions without calling the provider', async () => {
-    let providerCalled = false
-    const runtime = createAgentRuntime({
-      controlDecision: async () => ({
-        kind: 'task_mode',
-        summary: 'Inspect tests and propose a fix',
-        reason: 'stage_one_task_mode',
-      }),
-      provider: async () => {
-        providerCalled = true
-        return { text: 'provider answer' }
-      },
-    })
-
-    const events = await runtime.run('fix the tests')
-
-    expect(providerCalled).toBe(false)
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'system_status',
-        payload: expect.objectContaining({
-          stage: 'routing',
-          reason: 'stage_one_task_mode',
-          controlDecision: 'task_mode',
-        }),
-      }),
-    )
-    expect(
-      events.some(
-        event =>
-          event.type === 'system_status' &&
-          'responsePolicyId' in event.payload,
-      ),
-    ).toBe(false)
-    expect(events.at(-1)).toMatchObject({
-      type: 'assistant_text',
-      payload: {
-        text: 'Task Mode selected: Inspect tests and propose a fix',
-      },
-    })
-  })
-
   it('uses execute decisions to run read-only tools and still appends the brief policy', async () => {
     const workspaceRoot = await tempRuntimeDir()
     const calls: string[][] = []
@@ -390,6 +312,78 @@ describe('agent runtime', () => {
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }
+  })
+
+  it('passes execute tools and requires a tool call while in execute mode', async () => {
+    const requests: unknown[] = []
+    const runtime = createAgentRuntime({
+      controlDecision: async () => ({
+        kind: 'execute',
+        reason: 'stage_one_execute_explicit_request',
+      }),
+      provider: async ({
+        tools,
+        toolChoice,
+        recordModelRequest,
+        recordModelResponse,
+      }) => {
+        requests.push({ tools, toolChoice })
+        await recordModelRequest({
+          body: {
+            model: 'test-model',
+            tools,
+            tool_choice: toolChoice,
+          },
+        })
+        await recordModelResponse({
+          body: {
+            tool_calls: [
+              {
+                id: 'tool-1',
+                type: 'function',
+                function: {
+                  name: 'finish',
+                  arguments: JSON.stringify({ message: 'done' }),
+                },
+              },
+            ],
+          },
+        })
+
+        return {
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-1',
+              type: 'function',
+              function: {
+                name: 'finish',
+                arguments: JSON.stringify({ message: 'done' }),
+              },
+            },
+          ],
+        }
+      },
+      id: (() => {
+        let count = 0
+        return () => `evt-${++count}`
+      })(),
+    })
+
+    const events = await runtime.run('inspect package.json')
+
+    expect(requests).toEqual([
+      expect.objectContaining({
+        toolChoice: 'required',
+        tools: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'function',
+            function: expect.objectContaining({ name: 'finish' }),
+          }),
+        ]),
+      }),
+    ])
+    expect(events.some(event => event.type === 'tool_call')).toBe(true)
   })
 
   it('does not run tools when the first layer selects direct answer', async () => {

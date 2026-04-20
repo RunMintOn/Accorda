@@ -25,6 +25,8 @@ const bashInput = z.object({
 
 type ExecuteDefinition = {
   name: string
+  description: string
+  parameters: Record<string, unknown>
   requiresConfirmation: boolean
 }
 
@@ -38,15 +40,114 @@ export function createExecuteToolCatalog(workspaceRoot: string): {
 
   return {
     definitions: [
-      { name: 'ls', requiresConfirmation: false },
-      { name: 'read', requiresConfirmation: false },
-      { name: 'glob', requiresConfirmation: false },
-      { name: 'grep', requiresConfirmation: false },
-      { name: 'write', requiresConfirmation: true },
-      { name: 'edit', requiresConfirmation: true },
-      { name: 'bash', requiresConfirmation: true },
-      { name: 'ask_user', requiresConfirmation: false },
-      { name: 'finish', requiresConfirmation: false },
+      {
+        name: 'ls',
+        description: 'List files in a directory',
+        parameters: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          additionalProperties: false,
+        },
+        requiresConfirmation: false,
+      },
+      {
+        name: 'read',
+        description: 'Read a file from the workspace',
+        parameters: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: false,
+      },
+      {
+        name: 'glob',
+        description: 'Find files by pattern',
+        parameters: {
+          type: 'object',
+          properties: { pattern: { type: 'string' } },
+          required: ['pattern'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: false,
+      },
+      {
+        name: 'grep',
+        description: 'Search file contents by pattern',
+        parameters: {
+          type: 'object',
+          properties: {
+            pattern: { type: 'string' },
+            path: { type: 'string' },
+          },
+          required: ['pattern'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: false,
+      },
+      {
+        name: 'write',
+        description: 'Create or overwrite a file',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            content: { type: 'string' },
+          },
+          required: ['path', 'content'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: true,
+      },
+      {
+        name: 'edit',
+        description: 'Replace text in a file',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            oldText: { type: 'string' },
+            newText: { type: 'string' },
+          },
+          required: ['path', 'oldText', 'newText'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: true,
+      },
+      {
+        name: 'bash',
+        description: 'Run a shell command inside the workspace root',
+        parameters: {
+          type: 'object',
+          properties: { command: { type: 'string' } },
+          required: ['command'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: true,
+      },
+      {
+        name: 'ask_user',
+        description: 'Ask the user a question and pause execute mode',
+        parameters: {
+          type: 'object',
+          properties: { question: { type: 'string' } },
+          required: ['question'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: false,
+      },
+      {
+        name: 'finish',
+        description: 'Finish execute mode and return the final answer',
+        parameters: {
+          type: 'object',
+          properties: { message: { type: 'string' } },
+          required: ['message'],
+          additionalProperties: false,
+        },
+        requiresConfirmation: false,
+      },
     ],
     handlers: {
       ...readOnly,
