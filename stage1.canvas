@@ -1,0 +1,121 @@
+{
+  "nodes": [
+    {
+      "type": "text",
+      "id": "2c7a86d1-fca9-47f7-9556-bf203104e5b4",
+      "x": 422.2905240420736,
+      "y": 355.5715788763148,
+      "width": 260,
+      "height": 80,
+      "text": "llm大模型"
+    },
+    {
+      "type": "text",
+      "id": "a5fa9d7e-8c76-4042-9ade-77b14c4a6486",
+      "x": 841,
+      "y": 357,
+      "width": 260,
+      "height": 80,
+      "text": "他会看到以下东西"
+    },
+    {
+      "type": "text",
+      "id": "129fd5eb-e107-4f10-95a1-89b583575916",
+      "x": 1217,
+      "y": 202,
+      "width": 260,
+      "height": 80,
+      "text": "role:..."
+    },
+    {
+      "type": "text",
+      "id": "17c41e20-3b02-4dc1-ae58-b74bb18c0740",
+      "x": 1282,
+      "y": 282,
+      "width": 260,
+      "height": 80,
+      "text": "..."
+    },
+    {
+      "type": "text",
+      "id": "e298ab6c-9827-417d-9c73-b66bb76608b7",
+      "x": 1285,
+      "y": 398,
+      "width": 260,
+      "height": 80,
+      "text": "stage1的工具列表"
+    },
+    {
+      "type": "group",
+      "id": "11680a25-844c-4380-ab7c-d83f2ed1c7e3",
+      "x": 1197,
+      "y": 182,
+      "width": 368,
+      "height": 316,
+      "label": "提示词"
+    },
+    {
+      "type": "text",
+      "id": "847e87c8-1702-4be0-b8c5-a2a9e3b6c6a3",
+      "x": 1681.483726404019,
+      "y": 294.1115482367581,
+      "width": 260,
+      "height": 80,
+      "text": "进入某一个状态"
+    }
+  ],
+  "edges": [
+    {
+      "id": "0d60c73c-a2e4-4454-b393-acb90842a842",
+      "fromNode": "a5fa9d7e-8c76-4042-9ade-77b14c4a6486",
+      "fromSide": "right",
+      "toNode": "129fd5eb-e107-4f10-95a1-89b583575916",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "style": "solid",
+      "shape": "curved"
+    },
+    {
+      "id": "38272a49-0dd1-4fd8-aba5-6eec6576c1f6",
+      "fromNode": "a5fa9d7e-8c76-4042-9ade-77b14c4a6486",
+      "fromSide": "right",
+      "toNode": "17c41e20-3b02-4dc1-ae58-b74bb18c0740",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "style": "solid",
+      "shape": "curved"
+    },
+    {
+      "id": "3037fcec-7732-45e6-8f45-3774ef8e7507",
+      "fromNode": "a5fa9d7e-8c76-4042-9ade-77b14c4a6486",
+      "fromSide": "right",
+      "toNode": "e298ab6c-9827-417d-9c73-b66bb76608b7",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "style": "solid",
+      "shape": "curved"
+    },
+    {
+      "id": "3b127fba-326e-4231-b379-f091d596dfac",
+      "fromNode": "2c7a86d1-fca9-47f7-9556-bf203104e5b4",
+      "fromSide": "right",
+      "toNode": "a5fa9d7e-8c76-4042-9ade-77b14c4a6486",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "接收到api请求",
+      "style": "solid",
+      "shape": "curved"
+    },
+    {
+      "id": "aa8d098d-95ae-4ff1-a573-580931f7b55d",
+      "fromNode": "11680a25-844c-4380-ab7c-d83f2ed1c7e3",
+      "fromSide": "right",
+      "toNode": "847e87c8-1702-4be0-b8c5-a2a9e3b6c6a3",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "call 其中工具",
+      "style": "solid",
+      "shape": "curved"
+    }
+  ]
+}
