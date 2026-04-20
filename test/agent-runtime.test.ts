@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createAgentRuntime } from '../src/runtime/agentRuntime'
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -384,6 +384,88 @@ describe('agent runtime', () => {
       }),
     ])
     expect(events.some(event => event.type === 'tool_call')).toBe(true)
+  })
+
+  it('returns permission_denied as an observation and keeps execute alive', async () => {
+    const readPendingExecute = vi
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        status: 'waiting_permission',
+        toolCallId: 'tool-1',
+        toolName: 'write',
+        input: {
+          path: 'notes.txt',
+          content: 'hello',
+        },
+      })
+      .mockResolvedValueOnce(null)
+    const savePendingExecute = vi.fn()
+    let providerCalls = 0
+    const runtime = createAgentRuntime({
+      controlDecision: async () => ({
+        kind: 'execute',
+        reason: 'stage_one_execute_explicit_request',
+      }),
+      sessionStore: {
+        readPendingExecute,
+        savePendingExecute,
+      },
+      provider: async () => {
+        providerCalls += 1
+
+        if (providerCalls === 1) {
+          return {
+            text: '',
+            toolCalls: [
+              {
+                id: 'tool-1',
+                type: 'function',
+                function: {
+                  name: 'write',
+                  arguments: JSON.stringify({
+                    path: 'notes.txt',
+                    content: 'hello',
+                  }),
+                },
+              },
+            ],
+          }
+        }
+
+        return {
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-2',
+              type: 'function',
+              function: {
+                name: 'finish',
+                arguments: JSON.stringify({ message: 'use a manual write instead' }),
+              },
+            },
+          ],
+        }
+      },
+    })
+
+    const first = await runtime.run('write notes.txt')
+    expect(first.some(event => event.payload.reason === 'execute_waiting_permission')).toBe(true)
+
+    const second = await runtime.run('n')
+    expect(
+      second.some(
+        event =>
+          event.type === 'tool_result' &&
+          event.payload.name === 'write' &&
+          event.payload.ok === false &&
+          event.payload.error === 'permission_denied',
+      ),
+    ).toBe(true)
+    expect(second.at(-1)).toMatchObject({
+      type: 'assistant_text',
+      payload: { text: 'use a manual write instead' },
+    })
   })
 
   it('does not run tools when the first layer selects direct answer', async () => {

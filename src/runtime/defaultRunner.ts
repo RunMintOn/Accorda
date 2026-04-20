@@ -114,6 +114,7 @@ function createDefaultProvider(): RuntimeProvider {
 function createRuntime(
   sessionId: string,
   options: RunLocalTurnOptions = {},
+  persistentSession?: ReturnType<typeof createSessionStore> | null,
 ) {
   return createAgentRuntime({
     sessionId,
@@ -122,6 +123,7 @@ function createRuntime(
     eventStore: options.eventLogPath
       ? createEventLogStore(options.eventLogPath)
       : undefined,
+    sessionStore: persistentSession ?? undefined,
     provider: createDefaultProvider(),
   })
 }
@@ -164,7 +166,7 @@ export async function runLocalTurn(
 
   try {
     if (options.eventLogPath || options.artifactDir || options.workspaceRoot) {
-      return createRuntime(sessionId, options).run(text)
+      return createRuntime(sessionId, options, persistentSession).run(text)
     }
 
     return getRuntime(sessionId).run(text)

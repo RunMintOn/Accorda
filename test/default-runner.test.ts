@@ -372,4 +372,79 @@ describe('runLocalTurn', () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it('resumes a pending ask_user execute loop on the next user message', async () => {
+    const { mkdtemp, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = await mkdtemp(join(tmpdir(), 'accorda-run-resume-'))
+
+    try {
+      loadConfig.mockReturnValue({
+        provider: {
+          baseURL: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'gpt-4.1-mini',
+        },
+        workspaceRoot: dir,
+      })
+      createTextCompletionFromBody
+        .mockResolvedValueOnce({
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-1',
+              type: 'function',
+              function: {
+                name: 'ask_user',
+                arguments: JSON.stringify({
+                  question: 'Which file should I inspect?',
+                }),
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-2',
+              type: 'function',
+              function: {
+                name: 'finish',
+                arguments: JSON.stringify({
+                  message: 'Inspect src/index.tsx first.',
+                }),
+              },
+            },
+          ],
+        })
+
+      const options = {
+        eventLogPath: join(dir, 'events.jsonl'),
+        artifactDir: join(dir, 'artifacts'),
+        workspaceRoot: dir,
+      }
+
+      const first = await runLocalTurn(
+        'session-loop',
+        'help me inspect this repo',
+        options,
+      )
+      expect(first.some(event => event.payload.reason === 'execute_waiting_user')).toBe(true)
+
+      const second = await runLocalTurn(
+        'session-loop',
+        'check src/index.tsx',
+        options,
+      )
+
+      expect(second.at(-1)).toMatchObject({
+        type: 'assistant_text',
+        payload: { text: 'Inspect src/index.tsx first.' },
+      })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

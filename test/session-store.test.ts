@@ -50,4 +50,27 @@ describe('session store', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it('persists pending execute state in session metadata', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'accorda-session-store-'))
+    try {
+      const store = createSessionStore({
+        runsDir: join(root, '.accorda', 'runs'),
+        sessionId: 'session-a',
+        workspaceRoot: root,
+        now: () => new Date('2026-04-12T00:00:00.000Z'),
+      })
+
+      await store.ensureSession()
+      await store.savePendingExecute({
+        status: 'waiting_user',
+      })
+
+      expect(await store.readPendingExecute()).toEqual({
+        status: 'waiting_user',
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })

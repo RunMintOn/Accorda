@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { EventRecord } from '../core/contracts'
+import type { EventRecord, PendingExecute, SessionMeta } from '../core/contracts'
 import { createEventLogStore } from './eventLogStore'
 
 type CreateSessionStoreOptions = {
@@ -39,18 +39,15 @@ export function createSessionStore(options: CreateSessionStoreOptions) {
     }
   }
 
-  async function readMeta() {
+  async function readMeta(): Promise<SessionMeta | null> {
     try {
-      return JSON.parse(await readFile(paths.sessionMetaPath, 'utf8')) as Record<
-        string,
-        unknown
-      >
+      return JSON.parse(await readFile(paths.sessionMetaPath, 'utf8')) as SessionMeta
     } catch {
       return null
     }
   }
 
-  async function writeMeta(meta: Record<string, unknown>) {
+  async function writeMeta(meta: SessionMeta) {
     await mkdir(runDir, { recursive: true })
     await writeFile(paths.sessionMetaPath, JSON.stringify(meta, null, 2), 'utf8')
   }
@@ -81,6 +78,20 @@ export function createSessionStore(options: CreateSessionStoreOptions) {
     },
     async readEvents() {
       return events.readAll()
+    },
+    async readPendingExecute() {
+      const meta = await readMeta()
+      return meta?.pendingExecute ?? null
+    },
+    async savePendingExecute(pendingExecute: PendingExecute | null) {
+      const timestamp = now().toISOString()
+      const existing = await readMeta()
+      await writeMeta({
+        ...createMeta(timestamp),
+        ...existing,
+        updatedAt: timestamp,
+        pendingExecute,
+      })
     },
     async writeModelCallArtifact(
       callId: string,

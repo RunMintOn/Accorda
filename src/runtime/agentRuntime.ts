@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { cwd } from 'node:process'
-import type { EventRecord, RuntimeStatusPayload } from '../core/contracts.js'
+import type {
+  EventRecord,
+  PendingExecute,
+  RuntimeStatusPayload,
+} from '../core/contracts.js'
+import { getDefaultPermissionMode } from '../permissions/policy.js'
 import type {
   ChatToolDefinition,
   ProviderTextResult,
@@ -56,16 +61,22 @@ type EventStore = {
   readAll(): Promise<EventRecord[]>
 }
 
+type RuntimeSessionStore = {
+  readPendingExecute?(): Promise<PendingExecute | null>
+  savePendingExecute?(pendingExecute: PendingExecute | null): Promise<void>
+}
+
 export type AgentRuntimeOptions = {
   sessionId?: string
   workspaceRoot?: string
   provider: RuntimeProvider
   eventStore?: EventStore
+  sessionStore?: RuntimeSessionStore
   artifactDir?: string
   contextWindowChars?: number
   contextPersistRatio?: number
   toolResultPersistBytes?: number
-  tools?: Partial<Record<ReadOnlyToolName, ReadOnlyToolHandler>>
+  tools?: Partial<Record<string, ReadOnlyToolHandler>>
   controlDecision?: ControlDecisionRunner
   now?: () => Date
   id?: () => string
@@ -274,10 +285,297 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return messages
   }
 
+  async function savePendingExecute(pendingExecute: PendingExecute | null) {
+    await options.sessionStore?.savePendingExecute?.(pendingExecute)
+  }
+
+  function isPermissionApproval(text: string) {
+    return /^(y|yes|approve|approved)$/i.test(text.trim())
+  }
+
+  async function executeProviderTurn(
+    events: EventRecord[],
+    responsePolicy: ResponsePolicy | null,
+    responsePolicyPayload: Record<string, unknown>,
+  ): Promise<EventRecord[]> {
+    for (let iteration = 0; iteration < 12; iteration += 1) {
+      const callId = id()
+      const messages = providerMessages(responsePolicy)
+      const providerToolNames = executeCatalog.definitions.map(tool => tool.name)
+      const providerTools = executeCatalog.definitions.map(tool => ({
+        type: 'function' as const,
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      }))
+      let requestArtifactPath: string | undefined
+      let modelCallFinished = false
+      const result = await options.provider({
+        callId,
+        messages,
+        toolNames: providerToolNames,
+        tools: providerTools,
+        toolChoice: 'required',
+        recordModelRequest: async value => {
+          const requestArtifact = await writeModelCallArtifact(
+            callId,
+            'request',
+            value,
+          )
+          requestArtifactPath = requestArtifact
+          await append(
+            events,
+            createEvent('model_call_started', {
+              callId,
+              layer: 'stage_two',
+              requestArtifact,
+              messageCount: messages.length,
+              toolNames: providerToolNames,
+            }),
+          )
+          return requestArtifact
+        },
+        recordModelResponse: async value => {
+          const responseArtifact = await writeModelCallArtifact(
+            callId,
+            'response',
+            value,
+          )
+          await append(
+            events,
+            createEvent('model_call_finished', {
+              callId,
+              ok: true,
+              responseArtifact,
+            }),
+          )
+          modelCallFinished = true
+          return responseArtifact
+        },
+      })
+
+      const providerStatus =
+        result.status ??
+        ({
+          message: 'Provider answered successfully',
+          level: 'info',
+          stage: 'executing',
+          reason: 'agent_runtime_execute',
+          source: 'provider',
+        } satisfies RuntimeStatusPayload)
+
+      if (!modelCallFinished && requestArtifactPath) {
+        await append(
+          events,
+          createEvent('model_call_finished', {
+            callId,
+            ok: providerStatus.level !== 'error',
+            requestArtifact: requestArtifactPath,
+            error:
+              providerStatus.level === 'error'
+                ? providerStatus.message
+                : undefined,
+            usage: result.usage,
+            model: result.model,
+            finishReason: result.finishReason,
+          }),
+        )
+      }
+
+      await append(
+        events,
+        createEvent('system_status', {
+          ...providerStatus,
+          ...responsePolicyPayload,
+          usage: result.usage,
+          model: result.model,
+          finishReason: result.finishReason,
+        }),
+      )
+
+      const providerToolCalls = normalizeProviderToolCalls(result.toolCalls)
+      if (!providerToolCalls.length) {
+        await append(
+          events,
+          createEvent('assistant_text', { text: result.text || '(empty response)' }),
+        )
+        await persistContextSnapshot(events)
+        return events
+      }
+
+      const toolCall = providerToolCalls[0]
+      await append(
+        events,
+        createEvent('tool_call', {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          input: toolCall.input,
+          layer:
+            toolCall.name === 'ask_user' || toolCall.name === 'finish'
+              ? 'control'
+              : 'real',
+        }),
+      )
+
+      if (toolCall.name === 'ask_user') {
+        await savePendingExecute({ status: 'waiting_user' })
+        await append(
+          events,
+          createEvent('system_status', {
+            message: 'Waiting for user reply',
+            level: 'info',
+            stage: 'waiting_user',
+            reason: 'execute_waiting_user',
+            source: 'runtime',
+          }),
+        )
+        await append(
+          events,
+          createEvent('assistant_text', {
+            text: String(toolCall.input.question ?? '(missing question)'),
+          }),
+        )
+        await persistContextSnapshot(events)
+        return events
+      }
+
+      if (toolCall.name === 'finish') {
+        await savePendingExecute(null)
+        await append(
+          events,
+          createEvent('tool_result', {
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            ok: true,
+            output: toolCall.input,
+          }),
+        )
+        await append(
+          events,
+          createEvent('assistant_text', {
+            text: String(toolCall.input.message ?? '(empty response)'),
+          }),
+        )
+        await persistContextSnapshot(events)
+        return events
+      }
+
+      if (getDefaultPermissionMode(toolCall.name) === 'confirm') {
+        await savePendingExecute({
+          status: 'waiting_permission',
+          toolCallId: toolCall.id,
+          toolName: toolCall.name as 'write' | 'edit' | 'bash',
+          input: toolCall.input,
+        })
+        await append(
+          events,
+          createEvent('system_status', {
+            message: `Waiting for permission to run ${toolCall.name}`,
+            level: 'info',
+            stage: 'waiting_permission',
+            reason: 'execute_waiting_permission',
+            source: 'permission',
+            toolName: toolCall.name,
+            input: toolCall.input,
+          }),
+        )
+        await persistContextSnapshot(events)
+        return events
+      }
+
+      const handler = executeCatalog.handlers[toolCall.name]
+      try {
+        const rawOutput = await handler(toolCall.input)
+        const output = await persistToolOutput(rawOutput)
+        await append(
+          events,
+          createEvent('tool_result', {
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            ok: true,
+            output,
+          }),
+        )
+      } catch (error) {
+        await append(
+          events,
+          createEvent('tool_result', {
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            ok: false,
+            error:
+              error instanceof Error ? error.message : 'Unknown tool failure',
+          }),
+        )
+      }
+    }
+
+    await append(
+      events,
+      createEvent('runtime_error', {
+        message: 'Execute loop exceeded iteration limit',
+      }),
+    )
+    return events
+  }
+
   async function runTurn(userText: string) {
     await initialize()
     const events: EventRecord[] = []
     await append(events, createEvent('user_message', { text: userText }))
+
+    const pendingExecute = await options.sessionStore?.readPendingExecute?.()
+    if (pendingExecute?.status === 'waiting_user') {
+      await savePendingExecute(null)
+      return executeProviderTurn(events, null, {})
+    }
+
+    if (pendingExecute?.status === 'waiting_permission') {
+      await savePendingExecute(null)
+
+      if (isPermissionApproval(userText)) {
+        const approvedHandler = executeCatalog.handlers[pendingExecute.toolName]
+
+        try {
+          const rawOutput = await approvedHandler(pendingExecute.input)
+          const output = await persistToolOutput(rawOutput)
+          await append(
+            events,
+            createEvent('tool_result', {
+              toolCallId: pendingExecute.toolCallId,
+              name: pendingExecute.toolName,
+              ok: true,
+              output,
+            }),
+          )
+        } catch (error) {
+          await append(
+            events,
+            createEvent('tool_result', {
+              toolCallId: pendingExecute.toolCallId,
+              name: pendingExecute.toolName,
+              ok: false,
+              error:
+                error instanceof Error ? error.message : 'Unknown tool failure',
+            }),
+          )
+        }
+      } else {
+        await append(
+          events,
+          createEvent('tool_result', {
+            toolCallId: pendingExecute.toolCallId,
+            name: pendingExecute.toolName,
+            ok: false,
+            error: 'permission_denied',
+          }),
+        )
+      }
+
+      return executeProviderTurn(events, null, {})
+    }
 
     const controlDecision = await decideControl({ sessionId, userText })
     const responsePolicy = selectResponsePolicy(controlDecision)
@@ -354,32 +652,20 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       }
     }
 
+    if (controlDecision.kind === 'execute') {
+      return executeProviderTurn(events, responsePolicy, responsePolicyPayload)
+    }
+
     const callId = id()
     const messages = providerMessages(responsePolicy)
     const toolNames = READ_ONLY_TOOL_NAMES
-    const layer = controlDecision.kind === 'execute' ? 'stage_two' : 'stage_one'
-    const providerTools =
-      controlDecision.kind === 'execute'
-        ? executeCatalog.definitions.map(tool => ({
-            type: 'function' as const,
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.parameters,
-            },
-          }))
-        : undefined
+    const layer = 'stage_one'
     let requestArtifactPath: string | undefined
     let modelCallFinished = false
     const result = await options.provider({
       callId,
       messages,
-      toolNames:
-        controlDecision.kind === 'execute'
-          ? executeCatalog.definitions.map(tool => tool.name)
-          : toolNames,
-      tools: providerTools,
-      toolChoice: controlDecision.kind === 'execute' ? 'required' : undefined,
+      toolNames,
       recordModelRequest: async value => {
         const requestArtifact = await writeModelCallArtifact(
           callId,
@@ -417,45 +703,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         return responseArtifact
       },
     })
-
-    const providerToolCalls = normalizeProviderToolCalls(result.toolCalls)
-    if (providerToolCalls.length) {
-      for (const toolCall of providerToolCalls) {
-        await append(
-          events,
-          createEvent('tool_call', {
-            toolCallId: toolCall.id,
-            name: toolCall.name,
-            input: toolCall.input,
-            layer:
-              toolCall.name === 'ask_user' || toolCall.name === 'finish'
-                ? 'control'
-                : 'real',
-          }),
-        )
-
-        await append(
-          events,
-          createEvent('tool_result', {
-            toolCallId: toolCall.id,
-            name: toolCall.name,
-            ok: true,
-            output: toolCall.input,
-          }),
-        )
-
-        if (toolCall.name === 'finish') {
-          await append(
-            events,
-            createEvent('assistant_text', {
-              text: String(toolCall.input.message ?? '(empty response)'),
-            }),
-          )
-          await persistContextSnapshot(events)
-          return events
-        }
-      }
-    }
 
     const providerStatus =
       result.status ??

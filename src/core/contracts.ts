@@ -62,13 +62,25 @@ export type EventRecord = {
 }
 
 export type SessionMeta = {
-  session_id: string
-  parent_session_id?: string
-  created_at: string
-  updated_at: string
-  last_user_prompt: string
+  schemaVersion: 1
+  sessionId: string
+  createdAt: string
+  updatedAt: string
+  workspaceRoot: string
   mode: 'normal'
+  pendingExecute?: PendingExecute | null
 }
+
+export type PendingExecute =
+  | {
+      status: 'waiting_user'
+    }
+  | {
+      status: 'waiting_permission'
+      toolCallId: string
+      toolName: 'write' | 'edit' | 'bash'
+      input: Record<string, unknown>
+    }
 
 export type RuntimeState = {
   stage: RuntimeStage
