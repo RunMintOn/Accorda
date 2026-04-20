@@ -34,48 +34,6 @@ export function createRuntimeEngine(deps: EngineDeps) {
         }
       }
 
-      if (stageOne.kind === 'clarify') {
-        return {
-          state: createRuntimeState(
-            'answering',
-            stageOne.reason ?? 'stage_one_clarify_request',
-          ),
-          returnedToStageOne: false,
-          finalText: stageOne.question,
-          status:
-            stageOne.status ??
-            {
-              message: 'Clarification needed',
-              level: 'info',
-              stage: 'answering',
-              reason: stageOne.reason ?? 'stage_one_clarify_request',
-              source: 'stage_one',
-            },
-          metadata: stageOne.metadata,
-        }
-      }
-
-      if (stageOne.kind === 'task_mode') {
-        return {
-          state: createRuntimeState(
-            'executing',
-            stageOne.reason ?? 'stage_one_task_mode',
-          ),
-          returnedToStageOne: false,
-          finalText: `Task Mode selected: ${stageOne.summary}`,
-          status:
-            stageOne.status ??
-            {
-              message: 'Task Mode selected',
-              level: 'info',
-              stage: 'executing',
-              reason: stageOne.reason ?? 'stage_one_task_mode',
-              source: 'stage_one',
-            },
-          metadata: stageOne.metadata,
-        }
-      }
-
       const stageTwo = await deps.runStageTwo({ sessionId, userText })
 
       return {

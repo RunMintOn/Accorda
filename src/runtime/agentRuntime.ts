@@ -256,26 +256,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       }),
     )
 
-    if (controlDecision.kind === 'clarify') {
-      await append(
-        events,
-        createEvent('assistant_text', { text: controlDecision.question }),
-      )
-      await persistContextSnapshot(events)
-      return events
-    }
-
-    if (controlDecision.kind === 'task_mode') {
-      await append(
-        events,
-        createEvent('assistant_text', {
-          text: `Task Mode selected: ${controlDecision.summary}`,
-        }),
-      )
-      await persistContextSnapshot(events)
-      return events
-    }
-
     const toolRequest =
       controlDecision.kind === 'execute' ? parseReadOnlyToolRequest(userText) : null
     if (toolRequest) {

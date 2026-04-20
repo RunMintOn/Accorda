@@ -17,20 +17,6 @@ export type StageOneDecision =
       status?: RuntimeStatusPayload
       metadata?: ProviderResultMetadata
     }
-  | {
-      kind: 'clarify'
-      question: string
-      reason?: string
-      status?: RuntimeStatusPayload
-      metadata?: ProviderResultMetadata
-    }
-  | {
-      kind: 'task_mode'
-      summary: string
-      reason?: string
-      status?: RuntimeStatusPayload
-      metadata?: ProviderResultMetadata
-    }
 
 export type StageOneRunner = (input: {
   sessionId: string

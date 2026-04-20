@@ -11,17 +11,6 @@ export const STAGE_ONE_TOOLS: ToolDefinition[] = [
     description: 'Enter the execution layer for an actionable request',
     requiresConfirmation: false,
   },
-  {
-    name: 'clarify',
-    description:
-      'Ask one direct clarification question when key information is missing. Ask only for the minimum information needed to continue. Do not answer the task yet. Do not ask multiple questions unless strictly necessary. Use this only when the missing information blocks a correct or safe next step.',
-    requiresConfirmation: false,
-  },
-  {
-    name: 'task_mode',
-    description: 'Enter a multi-step task planning and execution flow',
-    requiresConfirmation: false,
-  },
 ]
 
 export const STAGE_TWO_TOOLS: ToolDefinition[] = [
@@ -59,5 +48,15 @@ export const STAGE_TWO_TOOLS: ToolDefinition[] = [
     name: 'bash',
     description: 'Run a shell command',
     requiresConfirmation: true,
+  },
+  {
+    name: 'ask_user',
+    description: 'Ask the user for more information and pause execute mode',
+    requiresConfirmation: false,
+  },
+  {
+    name: 'finish',
+    description: 'Finish execute mode and return the final answer',
+    requiresConfirmation: false,
   },
 ]

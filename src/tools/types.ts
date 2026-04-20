@@ -1,8 +1,6 @@
 export type ToolName =
   | 'answer'
   | 'execute'
-  | 'clarify'
-  | 'task_mode'
   | 'ls'
   | 'read'
   | 'write'
@@ -10,6 +8,8 @@ export type ToolName =
   | 'glob'
   | 'grep'
   | 'bash'
+  | 'ask_user'
+  | 'finish'
 
 export type ToolDefinition = {
   name: ToolName

@@ -15,6 +15,7 @@ export type RuntimeStage =
   | 'routing'
   | 'answering'
   | 'executing'
+  | 'waiting_user'
   | 'waiting_permission'
   | 'error'
 

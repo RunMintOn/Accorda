@@ -1,5 +1,4 @@
 import type { RuntimeStatusPayload } from '../core/contracts.js'
-import { parseReadOnlyToolRequest } from '../tools/readOnly.js'
 
 export type ControlDecision =
   | {
@@ -8,16 +7,6 @@ export type ControlDecision =
     }
   | {
       kind: 'execute'
-      reason?: string
-    }
-  | {
-      kind: 'clarify'
-      question: string
-      reason?: string
-    }
-  | {
-      kind: 'task_mode'
-      summary: string
       reason?: string
     }
 
@@ -30,13 +19,19 @@ export type ControlDecisionRunner = (
   input: ControlDecisionInput,
 ) => Promise<ControlDecision>
 
+const EXECUTE_PREFIX = /^(read|ls|glob|grep|write|edit|bash)\b/i
+const EXECUTE_HINT =
+  /(帮我|看看|检查|检索|修复|修改|更新|创建|运行|搜索|inspect|check|fix|update|create|run|search)/i
+
 export async function defaultControlDecision(
   input: ControlDecisionInput,
 ): Promise<ControlDecision> {
-  if (parseReadOnlyToolRequest(input.userText)) {
+  const text = input.userText.trim()
+
+  if (EXECUTE_PREFIX.test(text) || EXECUTE_HINT.test(text)) {
     return {
       kind: 'execute',
-      reason: 'stage_one_execute_read_only_tool',
+      reason: 'stage_one_execute_explicit_request',
     }
   }
 

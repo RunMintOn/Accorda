@@ -5,7 +5,7 @@ import {
 } from '../src/runtime/controlDecision'
 
 describe('control decision', () => {
-  it('routes explicit read-only tool requests to execute', async () => {
+  it('routes explicit tool requests to execute', async () => {
     await expect(
       defaultControlDecision({
         sessionId: 's-1',
@@ -13,15 +13,15 @@ describe('control decision', () => {
       }),
     ).resolves.toEqual({
       kind: 'execute',
-      reason: 'stage_one_execute_read_only_tool',
+      reason: 'stage_one_execute_explicit_request',
     })
   })
 
-  it('routes ordinary input to direct answer', async () => {
+  it('routes ordinary explanatory input to answer', async () => {
     await expect(
       defaultControlDecision({
         sessionId: 's-1',
-        userText: 'explain the project briefly',
+        userText: 'explain this repo briefly',
       }),
     ).resolves.toEqual({
       kind: 'answer',
@@ -29,18 +29,17 @@ describe('control decision', () => {
     })
   })
 
-  it('creates routing status payloads for visible event logs', () => {
+  it('creates routing status payloads for execute', () => {
     expect(
       controlDecisionStatus({
-        kind: 'clarify',
-        question: 'Which file should I inspect?',
-        reason: 'stage_one_clarify_request',
+        kind: 'execute',
+        reason: 'stage_one_execute_explicit_request',
       }),
     ).toEqual({
-      message: 'Stage one selected clarify',
+      message: 'Stage one selected execute',
       level: 'info',
       stage: 'routing',
-      reason: 'stage_one_clarify_request',
+      reason: 'stage_one_execute_explicit_request',
       source: 'stage_one',
     })
   })
