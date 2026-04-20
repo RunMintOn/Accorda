@@ -1,4 +1,4 @@
-const ALWAYS_ALLOW = new Set(['ls', 'read', 'glob', 'grep'])
+const ALWAYS_ALLOW = new Set(['ls', 'read', 'glob', 'grep', 'ask_user', 'finish'])
 const REQUIRE_CONFIRM = new Set(['write', 'edit', 'bash'])
 
 export function getDefaultPermissionMode(

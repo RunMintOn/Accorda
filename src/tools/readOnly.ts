@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
-import { join, relative, resolve } from 'node:path'
+import { join, relative } from 'node:path'
+import { safeResolveWorkspacePath } from './workspacePaths'
 
 export type ReadOnlyToolName = 'ls' | 'read' | 'glob' | 'grep'
 
@@ -42,26 +43,8 @@ export function parseReadOnlyToolRequest(text: string): ReadOnlyToolCall | null 
   return null
 }
 
-function isInside(root: string, target: string) {
-  const normalizedRoot = resolve(root)
-  const normalizedTarget = resolve(target)
-  const pathFromRoot = relative(normalizedRoot, normalizedTarget)
-
-  return (
-    pathFromRoot === '' ||
-    (!pathFromRoot.startsWith('..') && pathFromRoot !== '..')
-  )
-}
-
 function safeResolve(workspaceRoot: string, value: unknown) {
-  const requested = typeof value === 'string' && value.trim() ? value.trim() : '.'
-  const resolved = resolve(workspaceRoot, requested)
-
-  if (!isInside(workspaceRoot, resolved)) {
-    throw new Error(`Path escapes workspace: ${requested}`)
-  }
-
-  return resolved
+  return safeResolveWorkspacePath(workspaceRoot, value)
 }
 
 async function collectFiles(root: string, path = root): Promise<string[]> {
