@@ -20,6 +20,10 @@ export type ChatCompletionBody = {
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
   tools?: ChatToolDefinition[]
   tool_choice?: 'auto' | 'required'
+  max_tokens?: number
+  chat_template_kwargs?: {
+    enable_thinking?: boolean
+  }
 }
 
 export function createOpenAICompatibleClient(config: AppConfig) {

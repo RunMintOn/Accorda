@@ -3,7 +3,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { promisify } from 'node:util'
 import { z } from 'zod'
-import { createReadOnlyTools, type ReadOnlyToolHandler } from './readOnly'
+import {
+  createReadOnlyTools,
+  type ReadOnlyToolHandler,
+  type ReadOnlyToolName,
+} from './readOnly'
 import { safeResolveWorkspacePath } from './workspacePaths'
 
 const execFileAsync = promisify(execFile)
@@ -35,8 +39,15 @@ type ExecuteHandlers = Record<string, ReadOnlyToolHandler>
 export function createExecuteToolCatalog(workspaceRoot: string): {
   definitions: ExecuteDefinition[]
   handlers: ExecuteHandlers
+}
+export function createExecuteToolCatalog(
+  workspaceRoot: string,
+  overrides: Partial<Record<ReadOnlyToolName, ReadOnlyToolHandler>> = {},
+): {
+  definitions: ExecuteDefinition[]
+  handlers: ExecuteHandlers
 } {
-  const readOnly = createReadOnlyTools(workspaceRoot)
+  const readOnly = { ...createReadOnlyTools(workspaceRoot), ...overrides }
 
   return {
     definitions: [

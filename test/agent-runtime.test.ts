@@ -45,7 +45,19 @@ describe('agent runtime', () => {
         const lastUser = [...messages]
           .reverse()
           .find(message => message.role === 'user')?.content
-        return { text: `reply:${lastUser}` }
+        return {
+          text: '',
+          toolCalls: [
+            {
+              id: `tool-${lastUser}`,
+              type: 'function',
+              function: {
+                name: 'answer',
+                arguments: JSON.stringify({ message: `reply:${lastUser}` }),
+              },
+            },
+          ],
+        }
       },
     })
 
@@ -57,21 +69,52 @@ describe('agent runtime', () => {
     expect(calls[1]).toContain('user:second question')
   })
 
-  it('appends the default brief policy for answer turns and records provider metadata', async () => {
-    const calls: string[][] = []
+  it('sends stage one control tools and requires a tool choice', async () => {
+    const calls: Array<{
+      messages: string[]
+      tools: unknown
+      toolChoice: unknown
+    }> = []
     const runtime = createAgentRuntime({
-      provider: async ({ messages }) => {
-        calls.push(messages.map(message => `${message.role}:${message.content}`))
-        return { text: 'hello back' }
+      provider: async ({ messages, tools, toolChoice }) => {
+        calls.push({
+          messages: messages.map(message => `${message.role}:${message.content}`),
+          tools,
+          toolChoice,
+        })
+        return {
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-answer',
+              type: 'function',
+              function: {
+                name: 'answer',
+                arguments: JSON.stringify({ message: 'hello back' }),
+              },
+            },
+          ],
+        }
       },
     })
 
     const events = await runtime.run('hello')
 
-    expect(calls[0]?.slice(0, 3)).toEqual([
+    expect(calls[0]?.messages.slice(0, 3)).toEqual([
       'system:You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
-      'system:Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
+      'system:Stage one is a control layer. You must call exactly one control tool. Use answer when you can respond now. Use execute when the request should enter the execution layer. Do not reply with normal assistant text.',
       'system:Be brief. Lead with the conclusion.',
+    ])
+    expect(calls[0]?.toolChoice).toBe('required')
+    expect(calls[0]?.tools).toEqual([
+      expect.objectContaining({
+        type: 'function',
+        function: expect.objectContaining({ name: 'answer' }),
+      }),
+      expect.objectContaining({
+        type: 'function',
+        function: expect.objectContaining({ name: 'execute' }),
+      }),
     ])
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -84,15 +127,32 @@ describe('agent runtime', () => {
         }),
       }),
     )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'runtime_decision',
+        payload: expect.objectContaining({
+          layer: 'stage_one',
+          decision: 'answer',
+        }),
+      }),
+    )
   })
 
   it('emits a runtime_decision event for the stage one choice', async () => {
     const runtime = createAgentRuntime({
-      controlDecision: async () => ({
-        kind: 'answer',
-        reason: 'stage_one_direct_answer',
+      provider: async () => ({
+        text: '',
+        toolCalls: [
+          {
+            id: 'tool-answer',
+            type: 'function',
+            function: {
+              name: 'answer',
+              arguments: JSON.stringify({ message: 'direct answer' }),
+            },
+          },
+        ],
       }),
-      provider: async () => ({ text: 'direct answer' }),
     })
 
     const events = await runtime.run('hello')
@@ -135,10 +195,31 @@ describe('agent runtime', () => {
           body: { model: 'test-model', messages, toolNames },
         })
         const responseArtifact = await recordModelResponse({
-          body: { text: 'hello back' },
+          body: {
+            tool_calls: [
+              {
+                id: 'tool-answer',
+                type: 'function',
+                function: {
+                  name: 'answer',
+                  arguments: JSON.stringify({ message: 'hello back' }),
+                },
+              },
+            ],
+          },
         })
         return {
-          text: 'hello back',
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-answer',
+              type: 'function',
+              function: {
+                name: 'answer',
+                arguments: JSON.stringify({ message: 'hello back' }),
+              },
+            },
+          ],
           model: 'test-model',
           trace: { callId, requestArtifact, responseArtifact },
         }
@@ -151,7 +232,7 @@ describe('agent runtime', () => {
       expect.objectContaining({
         type: 'model_call_started',
         payload: expect.objectContaining({
-          callId: 'call-1',
+          layer: 'stage_one',
           requestArtifact: expect.any(String),
           messageCount: expect.any(Number),
         }),
@@ -161,7 +242,6 @@ describe('agent runtime', () => {
       expect.objectContaining({
         type: 'model_call_finished',
         payload: expect.objectContaining({
-          callId: 'call-1',
           ok: true,
           responseArtifact: expect.any(String),
         }),
@@ -172,17 +252,71 @@ describe('agent runtime', () => {
   it('persists tool results larger than the configured threshold', async () => {
     const artifactDir = await tempRuntimeDir()
     try {
+      let callCount = 0
       const runtime = createAgentRuntime({
         artifactDir,
         toolResultPersistBytes: 20_000,
-        provider: async () => ({ text: 'read complete' }),
+        provider: async () => {
+          callCount += 1
+
+          if (callCount === 1) {
+            return {
+              text: '',
+              toolCalls: [
+                {
+                  id: 'tool-execute',
+                  type: 'function',
+                  function: {
+                    name: 'execute',
+                    arguments: JSON.stringify({
+                      user_text: 'read huge.txt',
+                      goal: 'Read huge.txt',
+                    }),
+                  },
+                },
+              ],
+            }
+          }
+
+          if (callCount === 2) {
+            return {
+              text: '',
+              toolCalls: [
+                {
+                  id: 'tool-read',
+                  type: 'function',
+                  function: {
+                    name: 'read',
+                    arguments: JSON.stringify({ path: 'huge.txt' }),
+                  },
+                },
+              ],
+            }
+          }
+
+          return {
+            text: '',
+            toolCalls: [
+              {
+                id: 'tool-finish',
+                type: 'function',
+                function: {
+                  name: 'finish',
+                  arguments: JSON.stringify({ message: 'read complete' }),
+                },
+              },
+            ],
+          }
+        },
         tools: {
           read: async () => 'x'.repeat(20_001),
         },
       })
 
       const events = await runtime.run('read huge.txt')
-      const result = events.find(event => event.type === 'tool_result')
+      const result = events.find(
+        event => event.type === 'tool_result' && event.payload.name === 'read',
+      )
 
       expect(result?.payload.output).toMatchObject({
         persisted: true,
@@ -231,6 +365,7 @@ describe('agent runtime', () => {
   it('runs the default glob tool against the configured workspace', async () => {
     const workspaceRoot = await tempRuntimeDir()
     try {
+      let callCount = 0
       await mkdir(join(workspaceRoot, 'src'), { recursive: true })
       await mkdir(join(workspaceRoot, 'src', 'nested'), { recursive: true })
       await writeFile(join(workspaceRoot, 'src', 'agent.ts'), 'export {}\n')
@@ -241,11 +376,64 @@ describe('agent runtime', () => {
 
       const runtime = createAgentRuntime({
         workspaceRoot,
-        provider: async () => ({ text: 'glob complete' }),
+        provider: async () => {
+          callCount += 1
+
+          if (callCount === 1) {
+            return {
+              text: '',
+              toolCalls: [
+                {
+                  id: 'tool-execute',
+                  type: 'function',
+                  function: {
+                    name: 'execute',
+                    arguments: JSON.stringify({
+                      user_text: 'glob **/*.ts',
+                      goal: 'Find TypeScript files.',
+                    }),
+                  },
+                },
+              ],
+            }
+          }
+
+          if (callCount === 2) {
+            return {
+              text: '',
+              toolCalls: [
+                {
+                  id: 'tool-glob',
+                  type: 'function',
+                  function: {
+                    name: 'glob',
+                    arguments: JSON.stringify({ pattern: '**/*.ts' }),
+                  },
+                },
+              ],
+            }
+          }
+
+          return {
+            text: '',
+            toolCalls: [
+              {
+                id: 'tool-finish',
+                type: 'function',
+                function: {
+                  name: 'finish',
+                  arguments: JSON.stringify({ message: 'glob complete' }),
+                },
+              },
+            ],
+          }
+        },
       })
 
       const events = await runtime.run('glob **/*.ts')
-      const result = events.find(event => event.type === 'tool_result')
+      const result = events.find(
+        event => event.type === 'tool_result' && event.payload.name === 'glob',
+      )
 
       expect(result?.payload).toMatchObject({
         name: 'glob',
@@ -260,67 +448,90 @@ describe('agent runtime', () => {
     }
   })
 
-  it('uses execute decisions to run read-only tools and still appends the brief policy', async () => {
-    const workspaceRoot = await tempRuntimeDir()
-    const calls: string[][] = []
-    try {
-      await writeFile(join(workspaceRoot, 'note.txt'), 'hello from note')
-      const runtime = createAgentRuntime({
-        workspaceRoot,
-        controlDecision: async () => ({
-          kind: 'execute',
-          reason: 'stage_one_execute',
-        }),
-        provider: async ({ messages }) => {
-          calls.push(messages.map(message => `${message.role}:${message.content}`))
-          return { text: 'tool result inspected' }
-        },
-      })
+  it('enters execute mode from the stage one execute tool and carries user_text + goal', async () => {
+    const calls: Array<{
+      tools: string[]
+      toolChoice: unknown
+      messages: string[]
+    }> = []
+    const runtime = createAgentRuntime({
+      provider: async ({ messages, tools, toolChoice }) => {
+        calls.push({
+          tools: (tools ?? []).map(tool => tool.function.name),
+          toolChoice,
+          messages: messages.map(message => `${message.role}:${message.content}`),
+        })
 
-      const events = await runtime.run('read note.txt')
+        if (calls.length === 1) {
+          return {
+            text: '',
+            toolCalls: [
+              {
+                id: 'tool-execute',
+                type: 'function',
+                function: {
+                  name: 'execute',
+                  arguments: JSON.stringify({
+                    user_text: 'inspect package.json',
+                    goal: 'Inspect package.json and summarize the scripts.',
+                  }),
+                },
+              },
+            ],
+          }
+        }
 
-      expect(calls[0]?.slice(0, 3)).toEqual([
-        'system:You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
-        'system:Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
-        'system:Be brief. Lead with the conclusion.',
-      ])
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: 'system_status',
-          payload: expect.objectContaining({
-            source: 'provider',
-            responsePolicyId: 'default_brief_v1',
-            responsePolicyMode: 'appended',
-            responseStyle: 'default_brief',
-          }),
+        return {
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-finish',
+              type: 'function',
+              function: {
+                name: 'finish',
+                arguments: JSON.stringify({ message: 'done' }),
+              },
+            },
+          ],
+        }
+      },
+    })
+
+    const events = await runtime.run('inspect package.json')
+
+    expect(calls).toHaveLength(2)
+    expect(calls[0]).toMatchObject({
+      toolChoice: 'required',
+      tools: ['answer', 'execute'],
+    })
+    expect(calls[1]).toMatchObject({
+      toolChoice: 'required',
+    })
+    expect(calls[1]?.tools).toContain('finish')
+    expect(
+      calls[1]?.messages.some(message =>
+        message.includes('"name":"execute"') &&
+        message.includes('"goal":"Inspect package.json and summarize the scripts."'),
+      ),
+    ).toBe(true)
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'runtime_decision',
+        payload: expect.objectContaining({
+          decision: 'execute',
+          layer: 'stage_one',
         }),
-      )
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: 'tool_result',
-          payload: expect.objectContaining({
-            name: 'read',
-            ok: true,
-            output: 'hello from note',
-          }),
-        }),
-      )
-      expect(events.at(-1)).toMatchObject({
-        type: 'assistant_text',
-        payload: { text: 'tool result inspected' },
-      })
-    } finally {
-      await rm(workspaceRoot, { recursive: true, force: true })
-    }
+      }),
+    )
+    expect(events.at(-1)).toMatchObject({
+      type: 'assistant_text',
+      payload: { text: 'done' },
+    })
   })
 
   it('passes execute tools and requires a tool call while in execute mode', async () => {
     const requests: unknown[] = []
     const runtime = createAgentRuntime({
-      controlDecision: async () => ({
-        kind: 'execute',
-        reason: 'stage_one_execute_explicit_request',
-      }),
       provider: async ({
         tools,
         toolChoice,
@@ -328,6 +539,49 @@ describe('agent runtime', () => {
         recordModelResponse,
       }) => {
         requests.push({ tools, toolChoice })
+        if (requests.length === 1) {
+          await recordModelRequest({
+            body: {
+              model: 'test-model',
+              tools,
+              tool_choice: toolChoice,
+            },
+          })
+          await recordModelResponse({
+            body: {
+              tool_calls: [
+                {
+                  id: 'tool-execute',
+                  type: 'function',
+                  function: {
+                    name: 'execute',
+                    arguments: JSON.stringify({
+                      user_text: 'inspect package.json',
+                      goal: 'Inspect package.json',
+                    }),
+                  },
+                },
+              ],
+            },
+          })
+
+          return {
+            text: '',
+            toolCalls: [
+              {
+                id: 'tool-execute',
+                type: 'function',
+                function: {
+                  name: 'execute',
+                  arguments: JSON.stringify({
+                    user_text: 'inspect package.json',
+                    goal: 'Inspect package.json',
+                  }),
+                },
+              },
+            ],
+          }
+        }
         await recordModelRequest({
           body: {
             model: 'test-model',
@@ -372,7 +626,23 @@ describe('agent runtime', () => {
 
     const events = await runtime.run('inspect package.json')
 
-    expect(requests).toEqual([
+    expect(requests).toHaveLength(2)
+    expect(requests[0]).toEqual(
+      expect.objectContaining({
+        toolChoice: 'required',
+        tools: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'function',
+            function: expect.objectContaining({ name: 'answer' }),
+          }),
+          expect.objectContaining({
+            type: 'function',
+            function: expect.objectContaining({ name: 'execute' }),
+          }),
+        ]),
+      }),
+    )
+    expect(requests[1]).toEqual(
       expect.objectContaining({
         toolChoice: 'required',
         tools: expect.arrayContaining([
@@ -382,7 +652,7 @@ describe('agent runtime', () => {
           }),
         ]),
       }),
-    ])
+    )
     expect(events.some(event => event.type === 'tool_call')).toBe(true)
   })
 
@@ -403,10 +673,6 @@ describe('agent runtime', () => {
     const savePendingExecute = vi.fn()
     let providerCalls = 0
     const runtime = createAgentRuntime({
-      controlDecision: async () => ({
-        kind: 'execute',
-        reason: 'stage_one_execute_explicit_request',
-      }),
       sessionStore: {
         readPendingExecute,
         savePendingExecute,
@@ -415,6 +681,25 @@ describe('agent runtime', () => {
         providerCalls += 1
 
         if (providerCalls === 1) {
+          return {
+            text: '',
+            toolCalls: [
+              {
+                id: 'tool-execute',
+                type: 'function',
+                function: {
+                  name: 'execute',
+                  arguments: JSON.stringify({
+                    user_text: 'write notes.txt',
+                    goal: 'Write notes.txt',
+                  }),
+                },
+              },
+            ],
+          }
+        }
+
+        if (providerCalls === 2) {
           return {
             text: '',
             toolCalls: [
@@ -468,38 +753,19 @@ describe('agent runtime', () => {
     })
   })
 
-  it('does not run tools when the first layer selects direct answer', async () => {
-    const workspaceRoot = await tempRuntimeDir()
-    try {
-      await writeFile(join(workspaceRoot, 'note.txt'), 'hello from note')
-      const runtime = createAgentRuntime({
-        workspaceRoot,
-        controlDecision: async () => ({
-          kind: 'answer',
-          reason: 'stage_one_direct_answer',
-        }),
-        provider: async () => ({ text: 'direct provider answer' }),
-      })
+  it('treats bare stage one assistant text as a protocol error', async () => {
+    const runtime = createAgentRuntime({
+      provider: async () => ({ text: 'direct provider answer' }),
+    })
 
-      const events = await runtime.run('read note.txt')
+    const events = await runtime.run('hello')
 
-      expect(events.some(event => event.type === 'tool_call')).toBe(false)
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: 'system_status',
-          payload: expect.objectContaining({
-            stage: 'routing',
-            reason: 'stage_one_direct_answer',
-            controlDecision: 'answer',
-          }),
-        }),
-      )
-      expect(events.at(-1)).toMatchObject({
-        type: 'assistant_text',
-        payload: { text: 'direct provider answer' },
-      })
-    } finally {
-      await rm(workspaceRoot, { recursive: true, force: true })
-    }
+    expect(events.some(event => event.type === 'runtime_decision')).toBe(false)
+    expect(events.at(-1)).toMatchObject({
+      type: 'assistant_text',
+      payload: {
+        text: 'Stage one must return an answer or execute tool call.',
+      },
+    })
   })
 })

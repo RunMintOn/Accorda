@@ -38,7 +38,17 @@ describe('runLocalTurn', () => {
       workspaceRoot: '/tmp/workspace',
     })
     createTextCompletion.mockResolvedValue({
-      text: 'hello back',
+      text: '',
+      toolCalls: [
+        {
+          id: 'tool-answer',
+          type: 'function',
+          function: {
+            name: 'answer',
+            arguments: JSON.stringify({ message: 'hello back' }),
+          },
+        },
+      ],
       usage: {
         inputTokens: 10,
         outputTokens: 4,
@@ -62,8 +72,8 @@ describe('runLocalTurn', () => {
     expect(providerStatus).toMatchObject({
       type: 'system_status',
       payload: {
-        stage: 'answering',
-        reason: 'stage_one_direct_answer',
+        stage: 'routing',
+        reason: 'stage_one_control_round',
         source: 'provider',
         responsePolicyId: 'default_brief_v1',
         responsePolicyMode: 'appended',
@@ -93,7 +103,17 @@ describe('runLocalTurn', () => {
       workspaceRoot: '/tmp/workspace',
     })
     createTextCompletion.mockResolvedValue({
-      text: 'hello back',
+      text: '',
+      toolCalls: [
+        {
+          id: 'tool-answer',
+          type: 'function',
+          function: {
+            name: 'answer',
+            arguments: JSON.stringify({ message: 'hello back' }),
+          },
+        },
+      ],
       model: 'gpt-4.1-mini',
     })
 
@@ -104,7 +124,7 @@ describe('runLocalTurn', () => {
     )
 
     expect(statusEvent).toBeDefined()
-    expect(statusEvent?.payload.stage).toBe('answering')
+    expect(statusEvent?.payload.stage).toBe('routing')
     expect(statusEvent?.payload).not.toHaveProperty('usage')
   })
 
@@ -139,7 +159,7 @@ describe('runLocalTurn', () => {
     expect(answer?.payload).not.toEqual({ text: 'echo: hello' })
   })
 
-  it('appends the default brief policy before sending answer turns to the provider client', async () => {
+  it('sends stage one control tools before entering the provider client', async () => {
     loadConfig.mockReturnValue({
       provider: {
         baseURL: 'https://example.com/v1',
@@ -149,29 +169,83 @@ describe('runLocalTurn', () => {
       workspaceRoot: '/tmp/workspace',
     })
     createTextCompletion.mockResolvedValue({
-      text: 'hello back',
+      text: '',
+      toolCalls: [
+        {
+          id: 'tool-answer',
+          type: 'function',
+          function: {
+            name: 'answer',
+            arguments: JSON.stringify({ message: 'hello back' }),
+          },
+        },
+      ],
       model: 'gpt-4.1-mini',
     })
 
     await runLocalTurn('session-brief', 'hello')
 
     expect(createTextCompletion).toHaveBeenCalledTimes(1)
-    expect(createTextCompletion.mock.calls[0]?.[1].slice(0, 3)).toEqual([
-      {
-        role: 'system',
-        content:
-          'You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+    expect(createTextCompletionFromBody).toHaveBeenCalledTimes(1)
+    expect(createTextCompletionFromBody.mock.calls[0]?.[1]).toMatchObject({
+      tools: [
+        expect.objectContaining({
+          type: 'function',
+          function: expect.objectContaining({ name: 'answer' }),
+        }),
+        expect.objectContaining({
+          type: 'function',
+          function: expect.objectContaining({ name: 'execute' }),
+        }),
+      ],
+      tool_choice: 'required',
+      messages: expect.arrayContaining([
+        {
+          role: 'system',
+          content:
+            'You are Accorda, a minimal local coding assistant runtime. Answer concisely and use prior context when useful.',
+        },
+        {
+          role: 'system',
+          content:
+            'Stage one is a control layer. You must call exactly one control tool. Use answer when you can respond now. Use execute when the request should enter the execution layer. Do not reply with normal assistant text.',
+        },
+        {
+          role: 'system',
+          content: 'Be brief. Lead with the conclusion.',
+        },
+        {
+          role: 'user',
+          content: 'hello',
+        },
+      ]),
+    })
+  })
+
+  it('disables NVIDIA GLM thinking and raises the visible output budget', async () => {
+    loadConfig.mockReturnValue({
+      provider: {
+        baseURL: 'https://integrate.api.nvidia.com/v1',
+        apiKey: 'test-key',
+        model: 'z-ai/glm4.7',
       },
-      {
-        role: 'system',
-        content:
-          'Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
+      workspaceRoot: '/tmp/workspace',
+    })
+    createTextCompletion.mockResolvedValue({
+      text: 'hello back',
+      model: 'z-ai/glm4.7',
+    })
+
+    await runLocalTurn('session-nvidia-glm', 'nihao')
+
+    expect(createTextCompletionFromBody).toHaveBeenCalledTimes(1)
+    expect(createTextCompletionFromBody.mock.calls[0]?.[1]).toMatchObject({
+      model: 'z-ai/glm4.7',
+      max_tokens: 1024,
+      chat_template_kwargs: {
+        enable_thinking: false,
       },
-      {
-        role: 'system',
-        content: 'Be brief. Lead with the conclusion.',
-      },
-    ])
+    })
   })
 
   it('persists events to a caller-provided event log path', async () => {
@@ -190,7 +264,17 @@ describe('runLocalTurn', () => {
         workspaceRoot: dir,
       })
       createTextCompletion.mockResolvedValue({
-        text: 'logged answer',
+        text: '',
+        toolCalls: [
+          {
+            id: 'tool-answer',
+            type: 'function',
+            function: {
+              name: 'answer',
+              arguments: JSON.stringify({ message: 'logged answer' }),
+            },
+          },
+        ],
         model: 'gpt-4.1-mini',
       })
 
@@ -243,7 +327,17 @@ describe('runLocalTurn', () => {
         workspaceRoot: dir,
       })
       createTextCompletion.mockResolvedValue({
-        text: 'logged answer',
+        text: '',
+        toolCalls: [
+          {
+            id: 'tool-answer',
+            type: 'function',
+            function: {
+              name: 'answer',
+              arguments: JSON.stringify({ message: 'logged answer' }),
+            },
+          },
+        ],
         model: 'gpt-4.1-mini',
       })
 
@@ -284,7 +378,17 @@ describe('runLocalTurn', () => {
         workspaceRoot: dir,
       })
       createTextCompletionFromBody.mockResolvedValue({
-        text: 'logged answer',
+        text: '',
+        toolCalls: [
+          {
+            id: 'tool-answer',
+            type: 'function',
+            function: {
+              name: 'answer',
+              arguments: JSON.stringify({ message: 'logged answer' }),
+            },
+          },
+        ],
         model: 'gpt-4.1-mini',
         raw: { id: 'completion-1' },
       })
@@ -316,12 +420,17 @@ describe('runLocalTurn', () => {
         request.body.messages.some(
           (message: { role: string; content: string }) =>
             message.role === 'system' &&
-            message.content.includes('Tools: ls, read, glob, grep'),
+            message.content.includes('Stage one is a control layer'),
         ),
       ).toBe(true)
       expect(request.body).not.toHaveProperty('apiKey')
       expect(response.body).toMatchObject({
-        text: 'logged answer',
+        text: '',
+        toolCalls: [
+          expect.objectContaining({
+            function: expect.objectContaining({ name: 'answer' }),
+          }),
+        ],
         raw: { id: 'completion-1' },
       })
     } finally {
@@ -389,6 +498,22 @@ describe('runLocalTurn', () => {
         workspaceRoot: dir,
       })
       createTextCompletionFromBody
+        .mockResolvedValueOnce({
+          text: '',
+          toolCalls: [
+            {
+              id: 'tool-execute',
+              type: 'function',
+              function: {
+                name: 'execute',
+                arguments: JSON.stringify({
+                  user_text: 'help me inspect this repo',
+                  goal: 'Inspect the repository and ask a focused follow-up.',
+                }),
+              },
+            },
+          ],
+        })
         .mockResolvedValueOnce({
           text: '',
           toolCalls: [

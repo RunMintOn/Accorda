@@ -13,18 +13,7 @@ import type {
   ProviderTextResult,
 } from '../provider/openaiClient.js'
 import { createExecuteToolCatalog } from '../tools/executeCatalog.js'
-import {
-  createReadOnlyTools,
-  parseReadOnlyToolRequest,
-  READ_ONLY_TOOL_NAMES,
-  type ReadOnlyToolHandler,
-  type ReadOnlyToolName,
-} from '../tools/readOnly.js'
-import {
-  controlDecisionStatus,
-  defaultControlDecision,
-  type ControlDecisionRunner,
-} from './controlDecision.js'
+import type { ReadOnlyToolHandler } from '../tools/readOnly.js'
 import {
   createResponsePolicyMessage,
   responsePolicyMetadata,
@@ -77,7 +66,6 @@ export type AgentRuntimeOptions = {
   contextPersistRatio?: number
   toolResultPersistBytes?: number
   tools?: Partial<Record<string, ReadOnlyToolHandler>>
-  controlDecision?: ControlDecisionRunner
   now?: () => Date
   id?: () => string
 }
@@ -164,9 +152,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     options.contextPersistRatio ?? DEFAULT_CONTEXT_PERSIST_RATIO
   const now = options.now ?? (() => new Date())
   const id = options.id ?? randomUUID
-  const tools = { ...createReadOnlyTools(workspaceRoot), ...options.tools }
-  const executeCatalog = createExecuteToolCatalog(workspaceRoot)
-  const decideControl = options.controlDecision ?? defaultControlDecision
+  const executeCatalog = createExecuteToolCatalog(workspaceRoot, options.tools)
 
   let history: EventRecord[] = []
   let initialized = false
@@ -260,7 +246,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return artifactPath
   }
 
-  function providerMessages(responsePolicy: ResponsePolicy | null) {
+  function providerMessages(
+    layer: 'stage_one' | 'stage_two',
+    responsePolicy: ResponsePolicy | null,
+  ) {
+    const modePrompt =
+      layer === 'stage_one'
+        ? 'Stage one is a control layer. You must call exactly one control tool. Use answer when you can respond now. Use execute when the request should enter the execution layer. Do not reply with normal assistant text.'
+        : 'Use the provided execution tools to inspect the workspace, ask follow-up questions when needed, and call finish when the task is complete.'
     const messages: ProviderMessage[] = [
       {
         role: 'system',
@@ -269,8 +262,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       },
       {
         role: 'system',
-        content:
-          'Tools: ls, read, glob, grep. Tool results may appear in context; API tool-calls are not enabled yet.',
+        content: modePrompt,
       },
     ]
 
@@ -293,6 +285,265 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return /^(y|yes|approve|approved)$/i.test(text.trim())
   }
 
+  function stageOneToolDefinitions(): ChatToolDefinition[] {
+    return [
+      {
+        type: 'function',
+        function: {
+          name: 'answer',
+          description: 'Answer directly without entering the execution layer',
+          parameters: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+            },
+            required: ['message'],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'execute',
+          description: 'Enter the execution layer for an actionable request',
+          parameters: {
+            type: 'object',
+            properties: {
+              user_text: { type: 'string' },
+              goal: { type: 'string' },
+            },
+            required: ['user_text', 'goal'],
+            additionalProperties: false,
+          },
+        },
+      },
+    ]
+  }
+
+  async function stageOneProviderTurn(
+    events: EventRecord[],
+    userText: string,
+  ): Promise<EventRecord[]> {
+    const responsePolicy = selectResponsePolicy({ kind: 'answer' })
+    const responsePolicyPayload = responsePolicy
+      ? responsePolicyMetadata(responsePolicy)
+      : {}
+    const callId = id()
+    const messages = providerMessages('stage_one', responsePolicy)
+    const providerTools = stageOneToolDefinitions()
+    const toolNames = providerTools.map(tool => tool.function.name)
+    let requestArtifactPath: string | undefined
+    let modelCallFinished = false
+    const result = await options.provider({
+      callId,
+      messages,
+      toolNames,
+      tools: providerTools,
+      toolChoice: 'required',
+      recordModelRequest: async value => {
+        const requestArtifact = await writeModelCallArtifact(
+          callId,
+          'request',
+          value,
+        )
+        requestArtifactPath = requestArtifact
+        await append(
+          events,
+          createEvent('model_call_started', {
+            callId,
+            layer: 'stage_one',
+            requestArtifact,
+            messageCount: messages.length,
+            toolNames,
+          }),
+        )
+        return requestArtifact
+      },
+      recordModelResponse: async value => {
+        const responseArtifact = await writeModelCallArtifact(
+          callId,
+          'response',
+          value,
+        )
+        await append(
+          events,
+          createEvent('model_call_finished', {
+            callId,
+            ok: true,
+            responseArtifact,
+          }),
+        )
+        modelCallFinished = true
+        return responseArtifact
+      },
+    })
+
+    if (!modelCallFinished && requestArtifactPath) {
+      await append(
+        events,
+        createEvent('model_call_finished', {
+          callId,
+          ok: result.status?.level !== 'error',
+          requestArtifact: requestArtifactPath,
+          error:
+            result.status?.level === 'error' ? result.status.message : undefined,
+          usage: result.usage,
+          model: result.model,
+          finishReason: result.finishReason,
+        }),
+      )
+    }
+
+    await append(
+      events,
+      createEvent('system_status', {
+        message: result.status?.message ?? 'Provider returned stage one control decision',
+        level: result.status?.level ?? 'info',
+        stage:
+          result.status?.level === 'error'
+            ? result.status.stage
+            : 'routing',
+        reason:
+          result.status?.level === 'error'
+            ? result.status.reason
+            : 'stage_one_control_round',
+        source: result.status?.source ?? 'provider',
+        ...responsePolicyPayload,
+        usage: result.usage,
+        model: result.model,
+        finishReason: result.finishReason,
+      }),
+    )
+
+    if (result.status?.level === 'error') {
+      await append(
+        events,
+        createEvent('assistant_text', {
+          text: result.text || 'Provider unavailable. Check configuration and try again.',
+        }),
+      )
+      await persistContextSnapshot(events)
+      return events
+    }
+
+    const providerToolCalls = normalizeProviderToolCalls(result.toolCalls)
+    const toolCall = providerToolCalls[0]
+
+    if (!toolCall || (toolCall.name !== 'answer' && toolCall.name !== 'execute')) {
+      await append(
+        events,
+        createEvent('system_status', {
+          message: 'Stage one must return an answer or execute tool call.',
+          level: 'error',
+          stage: 'error',
+          reason: 'stage_one_protocol_error',
+          source: 'runtime',
+          ...responsePolicyPayload,
+          usage: result.usage,
+          model: result.model,
+          finishReason: result.finishReason,
+        }),
+      )
+      await append(
+        events,
+        createEvent('assistant_text', {
+          text: 'Stage one must return an answer or execute tool call.',
+        }),
+      )
+      await persistContextSnapshot(events)
+      return events
+    }
+
+    await append(
+      events,
+      createEvent('tool_call', {
+        toolCallId: toolCall.id,
+        name: toolCall.name,
+        input: toolCall.input,
+        layer: 'control',
+      }),
+    )
+    await append(
+      events,
+      createEvent('tool_result', {
+        toolCallId: toolCall.id,
+        name: toolCall.name,
+        ok: true,
+        output: toolCall.input,
+      }),
+    )
+
+    if (toolCall.name === 'answer') {
+      const message = String(toolCall.input.message ?? '(empty response)')
+      await append(
+        events,
+        createEvent('runtime_decision', {
+          layer: 'stage_one',
+          decision: 'answer',
+          reason: 'stage_one_direct_answer',
+          responsePolicyId: responsePolicyPayload.responsePolicyId,
+          responsePolicyMode: responsePolicyPayload.responsePolicyMode,
+          responseStyle: responsePolicyPayload.responseStyle,
+        }),
+      )
+      await append(
+        events,
+        createEvent('system_status', {
+          message: 'Stage one selected answer',
+          level: 'info',
+          stage: 'routing',
+          reason: 'stage_one_direct_answer',
+          source: 'stage_one',
+          controlDecision: 'answer',
+          ...responsePolicyPayload,
+        }),
+      )
+      await append(events, createEvent('assistant_text', { text: message }))
+      await persistContextSnapshot(events)
+      return events
+    }
+
+    const executeInput = {
+      user_text: String(toolCall.input.user_text ?? userText),
+      goal: String(toolCall.input.goal ?? userText),
+    }
+    await append(
+      events,
+      createEvent('runtime_decision', {
+        layer: 'stage_one',
+        decision: 'execute',
+        reason: 'stage_one_execute',
+        responsePolicyId: responsePolicyPayload.responsePolicyId,
+        responsePolicyMode: responsePolicyPayload.responsePolicyMode,
+        responseStyle: responsePolicyPayload.responseStyle,
+      }),
+    )
+    await append(
+      events,
+      createEvent('system_status', {
+        message: 'Stage one selected execute',
+        level: 'info',
+        stage: 'routing',
+        reason: 'stage_one_execute',
+        source: 'stage_one',
+        controlDecision: 'execute',
+        ...responsePolicyPayload,
+      }),
+    )
+    await append(
+      events,
+      createEvent('tool_result', {
+        toolCallId: toolCall.id,
+        name: 'execute_context',
+        ok: true,
+        output: executeInput,
+      }),
+    )
+
+    return executeProviderTurn(events, responsePolicy, responsePolicyPayload)
+  }
+
   async function executeProviderTurn(
     events: EventRecord[],
     responsePolicy: ResponsePolicy | null,
@@ -300,7 +551,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   ): Promise<EventRecord[]> {
     for (let iteration = 0; iteration < 12; iteration += 1) {
       const callId = id()
-      const messages = providerMessages(responsePolicy)
+      const messages = providerMessages('stage_two', responsePolicy)
       const providerToolNames = executeCatalog.definitions.map(tool => tool.name)
       const providerTools = executeCatalog.definitions.map(tool => ({
         type: 'function' as const,
@@ -577,174 +828,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return executeProviderTurn(events, null, {})
     }
 
-    const controlDecision = await decideControl({ sessionId, userText })
-    const responsePolicy = selectResponsePolicy(controlDecision)
-    const responsePolicyPayload = responsePolicy
-      ? responsePolicyMetadata(responsePolicy)
-      : {}
-    const controlStatus = controlDecisionStatus(controlDecision)
-    await append(
-      events,
-      createEvent('runtime_decision', {
-        layer: 'stage_one',
-        decision: controlDecision.kind,
-        reason: controlDecision.reason ?? `stage_one_${controlDecision.kind}`,
-        responsePolicyId: responsePolicyPayload.responsePolicyId,
-        responsePolicyMode: responsePolicyPayload.responsePolicyMode,
-        responseStyle: responsePolicyPayload.responseStyle,
-      }),
-    )
-    await append(
-      events,
-      createEvent('system_status', {
-        ...controlStatus,
-        controlDecision: controlDecision.kind,
-        ...responsePolicyPayload,
-      }),
-    )
-
-    const toolRequest =
-      controlDecision.kind === 'execute' ? parseReadOnlyToolRequest(userText) : null
-    if (toolRequest) {
-      const toolCallId = id()
-      await append(
-        events,
-        createEvent('system_status', {
-          message: `Running ${toolRequest.name}`,
-          level: 'info',
-          stage: 'executing',
-          reason: 'read_only_tool_request',
-          source: 'runtime',
-        }),
-      )
-      await append(
-        events,
-        createEvent('tool_call', {
-          toolCallId,
-          name: toolRequest.name,
-          input: toolRequest.input,
-          layer: 'real',
-        }),
-      )
-
-      try {
-        const rawOutput = await tools[toolRequest.name](toolRequest.input)
-        const output = await persistToolOutput(rawOutput)
-        await append(
-          events,
-          createEvent('tool_result', {
-            toolCallId,
-            name: toolRequest.name,
-            ok: true,
-            output,
-          }),
-        )
-      } catch (error) {
-        await append(
-          events,
-          createEvent('tool_result', {
-            toolCallId,
-            name: toolRequest.name,
-            ok: false,
-            error: error instanceof Error ? error.message : 'Unknown tool failure',
-          }),
-        )
-      }
-    }
-
-    if (controlDecision.kind === 'execute') {
-      return executeProviderTurn(events, responsePolicy, responsePolicyPayload)
-    }
-
-    const callId = id()
-    const messages = providerMessages(responsePolicy)
-    const toolNames = READ_ONLY_TOOL_NAMES
-    const layer = 'stage_one'
-    let requestArtifactPath: string | undefined
-    let modelCallFinished = false
-    const result = await options.provider({
-      callId,
-      messages,
-      toolNames,
-      recordModelRequest: async value => {
-        const requestArtifact = await writeModelCallArtifact(
-          callId,
-          'request',
-          value,
-        )
-        requestArtifactPath = requestArtifact
-        await append(
-          events,
-          createEvent('model_call_started', {
-            callId,
-            layer,
-            requestArtifact,
-            messageCount: messages.length,
-            toolNames,
-          }),
-        )
-        return requestArtifact
-      },
-      recordModelResponse: async value => {
-        const responseArtifact = await writeModelCallArtifact(
-          callId,
-          'response',
-          value,
-        )
-        await append(
-          events,
-          createEvent('model_call_finished', {
-            callId,
-            ok: true,
-            responseArtifact,
-          }),
-        )
-        modelCallFinished = true
-        return responseArtifact
-      },
-    })
-
-    const providerStatus =
-      result.status ??
-      ({
-        message: 'Provider answered successfully',
-        level: 'info',
-        stage: 'answering',
-        reason: 'agent_runtime_answer',
-        source: 'provider',
-      } satisfies RuntimeStatusPayload)
-
-    if (!modelCallFinished && requestArtifactPath) {
-      await append(
-        events,
-        createEvent('model_call_finished', {
-          callId,
-          ok: providerStatus.level !== 'error',
-          requestArtifact: requestArtifactPath,
-          error:
-            providerStatus.level === 'error' ? providerStatus.message : undefined,
-          usage: result.usage,
-          model: result.model,
-          finishReason: result.finishReason,
-        }),
-      )
-      modelCallFinished = true
-    }
-
-    await append(
-      events,
-      createEvent('system_status', {
-        ...providerStatus,
-        ...responsePolicyPayload,
-        usage: result.usage,
-        model: result.model,
-        finishReason: result.finishReason,
-      }),
-    )
-    await append(events, createEvent('assistant_text', { text: result.text || '(empty response)' }))
-    await persistContextSnapshot(events)
-
-    return events
+    return stageOneProviderTurn(events, userText)
   }
 
   return {

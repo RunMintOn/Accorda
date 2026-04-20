@@ -40,6 +40,13 @@ function providerMessageForCompletion(message: {
   }
 }
 
+function isNvidiaGlmModel(baseURL: string, model: string): boolean {
+  return (
+    baseURL.includes('integrate.api.nvidia.com') &&
+    model.toLowerCase().startsWith('z-ai/glm')
+  )
+}
+
 function createDefaultProvider(): RuntimeProvider {
   return async ({
     callId,
@@ -63,6 +70,12 @@ function createDefaultProvider(): RuntimeProvider {
         model: config.provider.model,
         messages: messages.map(providerMessageForCompletion),
       }
+      if (isNvidiaGlmModel(config.provider.baseURL, config.provider.model)) {
+        body.max_tokens = 1024
+        body.chat_template_kwargs = {
+          enable_thinking: false,
+        }
+      }
       if (tools?.length) body.tools = tools
       if (toolChoice) body.tool_choice = toolChoice
       const timestamp = new Date().toISOString()
@@ -83,13 +96,6 @@ function createDefaultProvider(): RuntimeProvider {
       return {
         ...answer,
         trace: { callId, requestArtifact, responseArtifact },
-        status: {
-          message: 'Provider answered successfully',
-          level: 'info',
-          stage: 'answering',
-          reason: 'stage_one_direct_answer',
-          source: 'provider',
-        },
       }
     } catch (error) {
       const message =
