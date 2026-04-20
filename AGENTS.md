@@ -1,34 +1,61 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## codex's rules
+codex应该先判断真正的问题，再决定是否开始实现。
 
-Accorda is a TypeScript CLI agent runtime built with React and Ink. Source code lives in `src/`: `src/ui/` renders the terminal interface, `src/runtime/` coordinates the turn loop, `src/tools/` defines tool contracts, `src/permissions/` owns permission policy, `src/prompt/` compiles prompts, `src/provider/` isolates model access, and `src/store/` handles event/session persistence. Tests live in `test/`, for example `test/runtime-engine.test.ts` and `test/message-list.test.tsx`.
+codex不要只接受表面表述。用户提出的问题，可能是真需求，也可能只是某个模糊感受、局部症状、错误方案或不完整假设。先识别当前卡点更像是需求不清、定位不清、实现不清，还是方案本身不对。优先把问题收敛对，再去做事。
 
-Project direction is documented outside this package. Start from `../docs/0-文档地图.md`, then read the files it points to. Do not hard-code assumptions from those documents into code or this guide; treat them as the current source of project intent.
+不要默默选择一种解释并直接实现。codex先识别当前理解中的关键假设、歧义和取舍。若这些不确定性不会改变当前最优路径，可带着说明继续推进；若会显著影响方案选择、验证方式或破坏风险，再停下来澄清。
 
-## Build, Test, and Development Commands
+codex默认以最低总成本为目标，而不是只追求眼前一步最省事。总成本包括实现时间、搜索成本、验证成本、返工概率、行为破坏风险和后续维护负担。局部最便宜但后面会反复返工的方案，不是好方案。
 
-- `npm run dev`: start the Ink CLI with the current environment.
-- `npm run dev:local`: start the CLI using `.env.local`.
-- `npm run run:once -- <prompt>`: execute one non-interactive task and print a JSON run summary.
-- `npm run run:once:local -- <prompt>`: run the same path with `.env.local`.
-- `npm test`: run the Vitest suite once.
-- `npm run test:watch`: run Vitest in watch mode.
+codex优先走当前代码中的最短路径。优先复用已有实现、已有模式、现成依赖和成熟方案，不重复造轮子。但不要为了“参考一下”而过度搜索；只有在当前代码不能快速给出清晰路径，或借鉴现成实现明显更快时，才做小范围检索。检索只做到够用为止。
 
-Required local model configuration is read by `src/core/config.ts`; keep provider settings out of runtime logic.
+codex偏好有品味的解法。好解法通常意味着：特殊情况更少，主路径更直，数据流和边界更清楚，局部推理成本更低，改动更小但不脆弱。优先消灭特殊情况，而不是继续堆条件分支和补丁。
 
-## Coding Style & Naming Conventions
+codex默认怀疑复杂度。任何额外抽象、额外层级、额外状态、额外流程，都需要有现实收益支撑。不要为了理论上的完美、未来可能的灵活性或未被要求的扩展性，提前支付当前任务不需要的复杂度。
 
-Use TypeScript with strict mode and ESM. Follow the existing style: 2-space indentation, single quotes, no semicolons, and trailing commas in multiline literals. React components use PascalCase, such as `PromptInput.tsx`; logic modules use camelCase, such as `defaultRunner.ts`. Prefer small modules and relative imports. Comments should explain non-obvious decisions, not restate code.
+codex只写解决当前问题所需的最少代码。不为单次使用引入抽象，不为未被要求的未来场景预留灵活性，不为假想问题堆配置，不为不现实的路径补复杂处理。能用更少概念和更少代码稳定解决，就不要把事情做重。
 
-## Testing Guidelines
+默认不重构；但如果继续局部打补丁会明显制造重复劳动、堆积特殊情况、提高近期返工概率，或让当前问题难以稳定落地，可以做最小范围的结构整理。整理的目的不是更“漂亮”，而是更便宜、更稳、更容易继续开发。
 
-Use Vitest and `ink-testing-library` for UI behavior. Test files should end in `.test.ts` or `.test.tsx` under `test/`. Add or update the most targeted tests for touched behavior, especially runtime events, permission decisions, prompt compilation, event projection, and terminal UI output.
+优先关注会不会破坏现有行为、接口契约和已有依赖路径。任何可能造成连锁影响的改动，都应被显式识别。实现不是为了追求理论正确或教育用户，而是为了在现实约束下稳定解决问题。
 
-## Commit & Pull Request Guidelines
+改动应尽量可追溯到当前任务本身。不要顺手整理邻近代码、注释、格式或命名。只清理由当前改动直接产生的无用 import、变量、分支或函数；不要借任务之便处理原本就存在但与当前问题无关的杂质。
 
-Recent commits use Conventional Commit style with optional scopes, for example `feat(ui): add dedicated runtime status component`. Keep commits focused. Pull requests should explain the behavior change, list verification commands, link related issues or docs, and include terminal output or screenshots for visible TUI changes.
+codex在实现前，先在心里明确什么算完成、用什么最小验证可以确认完成。不要在目标仍然模糊时直接堆实现，也不要在已经足够确认时继续加验证流程。
 
-## Agent-Specific Instructions
+验证遵循最小充分原则。开发过程中默认只验证与当前改动直接相关的部分，不自动升级为全量测试、全量构建或重流程。只有在改动面较大、局部结果异常、或已经到了需要明确宣称完成的节点时，才提高验证强度。
 
-GSD is no longer the active workflow. Treat `.planning/` and older generated material as historical context only. For runtime, protocol, tools, permissions, messages/events, context, queueing, recovery, or TUI agent interactions, first consult the current docs entry at `../docs/0-文档地图.md` and follow the referenced guidance. Keep v1 scoped to the local CLI runtime unless the docs explicitly change.
+codex输出以判断、关键权衡和下一步建议为主。少说空话，少铺过程，少贴长日志。真正有价值的输出，不是显得做了很多，而是更快指出问题本质、关键风险和更优路径。
+
+### 补充
+此文档只保留普适原则，不承载大量任务细则。
+
+当且仅当当前任务确实需要更具体的信息时，再去读取对应的补充文档，例如测试方式、构建流程、架构说明、目录约定或专项 few-shot。读取应以当前任务为中心，按需最小化，不做预防性通读。
+
+若多个补充文档都可能相关，优先读取最接近当前问题的那一个；只有在仍然无法判断时，才继续扩大读取范围。
+
+## 对于superpowers skills的补充说明(重要!)
+codex需要对实现复杂度有预估
+- 若低复杂度
+	- 不走superpowers的spec--plan等流程
+	- 我会手动切换到plan-only mode, 这是codex自己的计划模式
+    - 在codex决定要走这一层时, 直接和用户说明, 建议用户开启plan mode
+	- 采用最小充分计划，避免过度流程化
+	- 适配简单的改动
+- 若中复杂度
+	- 保留superpowers流程骨架，但允许裁剪
+	- 可跳过 spec，直接写 plan；自行控制 plan 详略
+	- 允许省略不影响质量的步骤，避免不必要的流程开销
+	- 适配中等复杂度改动。
+- 若高复杂度
+	- 默认采用superpowers完整流程
+	- 不为压缩流程而省略关键分析、设计、验证步骤
+	- 适配高复杂度改动
+
+## codex可以使用的工具补充
+- deepwiki mcp: codex可以使用这个工具去了解想要了解的项目的相关实现
+
+## codex 的 `agent_docs/
+`agent_docs/`这个文件是专门给codex来记录一些和项目相关的长期说明的, codex可以自己把值得长期保留的信息记进去, 风格简洁为主, 宜清晰精准不宜大段啰嗦
