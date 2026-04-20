@@ -21,6 +21,7 @@ export function PermissionDialog({ pendingRequest = null }: Props) {
       <Text>
         {pendingRequest.toolName} requires permission {JSON.stringify(pendingRequest.input)}
       </Text>
+      <Text color="gray">Press Enter to allow. Press Esc to deny.</Text>
     </Box>
   )
 }

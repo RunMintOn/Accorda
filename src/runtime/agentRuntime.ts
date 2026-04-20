@@ -285,6 +285,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return /^(y|yes|approve|approved)$/i.test(text.trim())
   }
 
+  function isPermissionDenial(text: string) {
+    return /^(n|no|deny|denied|reject)$/i.test(text.trim())
+  }
+
   function stageOneToolDefinitions(): ChatToolDefinition[] {
     return [
       {
@@ -813,7 +817,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             }),
           )
         }
-      } else {
+      } else if (isPermissionDenial(userText)) {
         await append(
           events,
           createEvent('tool_result', {
@@ -823,6 +827,20 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             error: 'permission_denied',
           }),
         )
+      } else {
+        await append(
+          events,
+          createEvent('system_status', {
+            message: 'Permission response not understood',
+            level: 'warning',
+            stage: 'waiting_permission',
+            reason: 'execute_waiting_permission',
+            source: 'runtime',
+            toolName: pendingExecute.toolName,
+            input: pendingExecute.input,
+          }),
+        )
+        return events
       }
 
       return executeProviderTurn(events, null, {})

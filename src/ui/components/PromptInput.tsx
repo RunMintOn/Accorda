@@ -1,7 +1,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 
-type PromptMode = 'compose' | 'command_mode' | 'resume_select'
+type PromptMode = 'compose' | 'command_mode' | 'resume_select' | 'permission'
 
 type Props = {
   value: string
@@ -18,6 +18,7 @@ function renderInputLine(value: string, cursor: number) {
 
 function defaultHelper(mode: PromptMode): string[] {
   if (mode === 'resume_select') return ['Type a session number']
+  if (mode === 'permission') return ['Enter to approve, Esc to deny']
   return ['Try "read package.json" or start with / for commands']
 }
 

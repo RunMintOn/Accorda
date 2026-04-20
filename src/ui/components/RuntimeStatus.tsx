@@ -16,6 +16,8 @@ export type RuntimeStatusView = {
   usage?: ProviderUsage
   model?: string
   contextWindow?: number
+  executeStepCount?: number
+  completedExecuteStepCount?: number
 }
 
 type Props = {
@@ -55,6 +57,11 @@ export function RuntimeStatus({ status }: Props) {
         context: {context}
         {status.model ? ` · model: ${status.model}` : ''}
       </Text>
+      {typeof status.executeStepCount === 'number' ? (
+        <Text color="gray">
+          steps: {status.executeStepCount} total · {status.completedExecuteStepCount ?? 0} completed
+        </Text>
+      ) : null}
     </Box>
   )
 }

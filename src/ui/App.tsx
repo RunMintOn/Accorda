@@ -97,6 +97,46 @@ function createDefaultStatus(
   }
 }
 
+function latestExecuteStepCounts(events: EventRecord[]): {
+  executeStepCount: number
+  completedExecuteStepCount: number
+} | null {
+  let latestExecuteIndex = 0
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.type !== 'runtime_decision') continue
+    if (event.payload.layer !== 'stage_one') continue
+    if (event.payload.decision !== 'execute') continue
+    latestExecuteIndex = index
+    break
+  }
+
+  const toolCalls = new Set<string>()
+  const completed = new Set<string>()
+
+  for (const event of events.slice(latestExecuteIndex + 1)) {
+    if (event.type === 'tool_call') {
+      if (typeof event.payload.toolCallId !== 'string') continue
+      if (event.payload.layer !== 'real') continue
+      toolCalls.add(event.payload.toolCallId)
+    }
+
+    if (event.type === 'tool_result') {
+      if (typeof event.payload.toolCallId !== 'string') continue
+      if (!toolCalls.has(event.payload.toolCallId)) continue
+      completed.add(event.payload.toolCallId)
+    }
+  }
+
+  if (toolCalls.size === 0) return null
+
+  return {
+    executeStepCount: toolCalls.size,
+    completedExecuteStepCount: completed.size,
+  }
+}
+
 function latestRuntimeStatus(events: EventRecord[]): RuntimeStatusView | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
@@ -124,7 +164,8 @@ function latestPendingPermissionRequest(
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (event.type !== 'system_status') continue
-    if (event.payload.stage !== 'waiting_permission') continue
+    if (!isRuntimeStatusEventPayload(event.payload)) continue
+    if (event.payload.stage !== 'waiting_permission') return null
     if (typeof event.payload.toolName !== 'string') continue
     if (
       !event.payload.input ||
@@ -189,15 +230,20 @@ export function App({
     [inputState.value],
   )
   const runtimeStatus = React.useMemo(
-    () =>
-      latestRuntimeStatus(events) ??
-      (isLoading
-        ? createDefaultStatus({
-            stage: 'routing',
-            reason: 'awaiting_turn_result',
-            message: 'Waiting for runtime result',
-          })
-        : pendingStatus),
+    () => {
+      const baseStatus =
+        latestRuntimeStatus(events) ??
+        (isLoading
+          ? createDefaultStatus({
+              stage: 'routing',
+              reason: 'awaiting_turn_result',
+              message: 'Waiting for runtime result',
+            })
+          : pendingStatus)
+      const executeSteps = latestExecuteStepCounts(events)
+
+      return executeSteps ? { ...baseStatus, ...executeSteps } : baseStatus
+    },
     [events, isLoading, pendingStatus],
   )
   const pendingPermissionRequest = React.useMemo(
@@ -205,7 +251,9 @@ export function App({
     [events],
   )
   const promptMode =
-    mode.kind === 'resume_select'
+    runtimeStatus.stage === 'waiting_permission'
+      ? 'permission'
+      : mode.kind === 'resume_select'
       ? 'resume_select'
       : inputState.value.startsWith('/')
         ? 'command_mode'
@@ -321,6 +369,19 @@ export function App({
       if (loadingRef.current) return
 
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data)
+
+      if (latestRuntimeStatus(events)?.stage === 'waiting_permission') {
+        if (buffer.length === 1 && buffer[0] === 13) {
+          void handleSubmit('approve')
+          return
+        }
+
+        if (buffer.length === 1 && buffer[0] === 27) {
+          setInputStateSynced(createInputState())
+          void handleSubmit('deny')
+          return
+        }
+      }
 
       if (buffer.length === 1 && buffer[0] === 27) {
         pendingEscapeRef.current = true
