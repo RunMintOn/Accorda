@@ -69,4 +69,30 @@ describe('interactive app', () => {
       }),
     ])
   })
+
+  it('shows the permission dialog when the latest status is waiting_permission', async () => {
+    const { lastFrame } = render(
+      <App
+        initialEvents={[
+          {
+            id: 'evt-status',
+            sessionId: 'session-ui',
+            timestamp: '2026-04-12T00:00:00.000Z',
+            type: 'system_status',
+            payload: {
+              message: 'Waiting for permission',
+              level: 'info',
+              stage: 'waiting_permission',
+              reason: 'execute_waiting_permission',
+              toolName: 'write',
+              input: { path: 'notes.txt', content: 'hello' },
+            },
+          },
+        ]}
+      />,
+    )
+
+    expect(lastFrame()).toContain('Permission gate')
+    expect(lastFrame()).toContain('write')
+  })
 })

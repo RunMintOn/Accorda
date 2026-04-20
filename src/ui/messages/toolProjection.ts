@@ -48,6 +48,14 @@ export function projectToolStep({
     return { title: `Matched ${input.pattern}`, summary: ok === false ? error || 'failed' : 'completed' }
   }
 
+  if (name === 'ask_user') {
+    return { title: 'Asked user', summary: 'waiting for reply' }
+  }
+
+  if (name === 'finish') {
+    return { title: 'Finished execute', summary: 'returned final answer' }
+  }
+
   if (typeof input?.path === 'string') {
     return {
       title: `${name} ${input.path}`,

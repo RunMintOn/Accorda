@@ -59,6 +59,11 @@ type RuntimeStatusEventPayload = RuntimeStatusPayload & {
   contextWindow?: number
 }
 
+type PendingPermissionRequest = {
+  toolName: string
+  input: Record<string, unknown>
+}
+
 function isRuntimeStatusEventPayload(
   payload: Record<string, unknown>,
 ): payload is RuntimeStatusEventPayload {
@@ -73,6 +78,7 @@ function isRuntimeStatusEventPayload(
       stage === 'routing' ||
       stage === 'answering' ||
       stage === 'executing' ||
+      stage === 'waiting_user' ||
       stage === 'waiting_permission' ||
       stage === 'error')
   )
@@ -112,6 +118,31 @@ function latestRuntimeStatus(events: EventRecord[]): RuntimeStatusView | null {
   return null
 }
 
+function latestPendingPermissionRequest(
+  events: EventRecord[],
+): PendingPermissionRequest | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.type !== 'system_status') continue
+    if (event.payload.stage !== 'waiting_permission') continue
+    if (typeof event.payload.toolName !== 'string') continue
+    if (
+      !event.payload.input ||
+      typeof event.payload.input !== 'object' ||
+      Array.isArray(event.payload.input)
+    ) {
+      continue
+    }
+
+    return {
+      toolName: event.payload.toolName,
+      input: event.payload.input as Record<string, unknown>,
+    }
+  }
+
+  return null
+}
+
 function runsDir() {
   return join(cwd(), '.accorda', 'runs')
 }
@@ -140,7 +171,6 @@ export function App({
   const [pendingStatus, setPendingStatus] = React.useState<RuntimeStatusView>(
     createDefaultStatus(),
   )
-  const pendingPermissionRequest = null
   const inputStateRef = React.useRef(inputState)
   inputStateRef.current = inputState
   const modeRef = React.useRef(mode)
@@ -169,6 +199,10 @@ export function App({
           })
         : pendingStatus),
     [events, isLoading, pendingStatus],
+  )
+  const pendingPermissionRequest = React.useMemo(
+    () => latestPendingPermissionRequest(events),
+    [events],
   )
   const promptMode =
     mode.kind === 'resume_select'

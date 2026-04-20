@@ -71,6 +71,32 @@ describe('projectEventsToRenderableItems', () => {
     ])
   })
 
+  it('renders waiting_user status as a valid system message', () => {
+    const events: EventRecord[] = [
+      {
+        ...base,
+        id: 'evt-status',
+        type: 'system_status',
+        payload: {
+          message: 'Waiting for user reply',
+          level: 'info',
+          stage: 'waiting_user',
+          reason: 'execute_waiting_user',
+        },
+      },
+    ]
+
+    expect(projectEventsToRenderableItems(events)).toEqual([
+      {
+        id: 'evt-status',
+        kind: 'system',
+        level: 'info',
+        message: 'waiting_user: execute_waiting_user - Waiting for user reply',
+        timestamp: base.timestamp,
+      },
+    ])
+  })
+
   it('keeps model call trace events visible but compact', () => {
     const events: EventRecord[] = [
       {

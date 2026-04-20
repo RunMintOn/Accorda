@@ -16,6 +16,7 @@ function isRuntimeStage(value: unknown): value is RuntimeStage {
     value === 'routing' ||
     value === 'answering' ||
     value === 'executing' ||
+    value === 'waiting_user' ||
     value === 'waiting_permission' ||
     value === 'error'
   )
