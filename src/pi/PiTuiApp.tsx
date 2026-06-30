@@ -33,6 +33,13 @@ import {
 
 const thinkingLevels: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const enabledTools = ['read', 'grep', 'find', 'ls', 'bash', 'edit', 'write', 'append', 'task_start', 'task_update']
+const readyMessages = [
+  'Accorda 准备好了 _^',
+  'Accorda 在线 _<',
+  'Accorda 正在听 _^',
+  'Accorda 待命中 _<',
+  'Accorda 可以开始了 _<',
+]
 
 type Message = {
   id: string
@@ -61,6 +68,11 @@ function modelLabel(model: Model<any>) {
   return `${candidate.provider ?? 'unknown'}/${candidate.id ?? candidate.name ?? 'unknown'}`
 }
 
+function compactModelLabel(model: Model<any>) {
+  const candidate = model as unknown as { id?: string; name?: string }
+  return candidate.id ?? candidate.name ?? 'unknown'
+}
+
 function taskModeGuidance() {
   return `Accorda provides lightweight task and trace behavior. Use task_start conservatively: only when the user explicitly asks for Task Mode, or when visible task tracking would materially help complex, multi-step, stateful, risky, or validation-heavy work. If uncertain, continue normally or briefly ask the user whether to use Task Mode. Do not use Task Mode for simple answers or one-off explanations. task_start and task_update only update visible task state; they do not perform the user's work. For bash, edit, write, and append, intent is required and should be a concise, specific, user-visible purpose of the tool call.`
 }
@@ -87,6 +99,33 @@ function appendToMessage(setMessages: React.Dispatch<React.SetStateAction<Messag
   setMessages(current =>
     current.map(message => (message.id === id ? { ...message, text: `${message.text}${delta}` } : message)),
   )
+}
+
+function replaceMessage(setMessages: React.Dispatch<React.SetStateAction<Message[]>>, id: string, text: string) {
+  setMessages(current =>
+    current.map(message => (message.id === id ? { ...message, text } : message)),
+  )
+}
+
+function toolIntent(args: unknown) {
+  if (!args || typeof args !== 'object') return ''
+  const intent = (args as { intent?: unknown }).intent
+  return typeof intent === 'string' ? intent.trim() : ''
+}
+
+function toolTarget(toolName: string, args: unknown) {
+  if (!args || typeof args !== 'object') return ''
+  const input = args as { command?: unknown; path?: unknown; edits?: unknown; content?: unknown }
+  if (toolName === 'bash' && typeof input.command === 'string') return input.command
+  if (typeof input.path === 'string') return input.path
+  return ''
+}
+
+function toolResultSummary(result: unknown, isError: boolean) {
+  const text = textFromUnknownMessage(result)
+  const exitCode = text.match(/exit code:?\s*(\d+)/i)?.[1]
+  if (exitCode) return `${isError ? '✗' : '✓'} exit code ${exitCode}`
+  return isError ? '✗ failed' : '✓ done'
 }
 
 function assistantTextFromMessages(messages: unknown[]) {
@@ -123,6 +162,8 @@ async function createRuntime({
   setMessages,
   assistantMessageIdRef,
   streamedTextRef,
+  toolMessageIdsRef,
+  setTaskStatus,
 }: {
   model: Model<any>
   thinkingLevel: ThinkingLevel
@@ -130,6 +171,8 @@ async function createRuntime({
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   assistantMessageIdRef: React.MutableRefObject<string | null>
   streamedTextRef: React.MutableRefObject<boolean>
+  toolMessageIdsRef: React.MutableRefObject<Map<string, string>>
+  setTaskStatus: React.Dispatch<React.SetStateAction<TaskStatus | null>>
 }): Promise<Runtime> {
   const traceId = shortTraceId()
   const runDir = join(cwd(), '.accorda', 'pi-runs', traceId)
@@ -150,6 +193,7 @@ async function createRuntime({
         initialTaskStatus: taskStatus,
         onTaskStatusChange: status => {
           taskStatus = status
+          setTaskStatus(status)
         },
       }),
     ],
@@ -169,20 +213,51 @@ async function createRuntime({
   })
 
   session.subscribe(event => {
-    const currentAssistantId = assistantMessageIdRef.current
     if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {
       streamedTextRef.current = true
-      if (currentAssistantId) appendToMessage(setMessages, currentAssistantId, event.assistantMessageEvent.delta)
+      let assistantId = assistantMessageIdRef.current
+      if (!assistantId) {
+        assistantId = pushMessage(setMessages, { role: 'assistant', text: '' })
+        assistantMessageIdRef.current = assistantId
+      }
+      appendToMessage(setMessages, assistantId, event.assistantMessageEvent.delta)
     }
 
     if (event.type === 'tool_execution_start') {
-      const toolName = (event as unknown as { toolName?: string }).toolName ?? 'tool'
-      pushMessage(setMessages, { role: 'tool', text: `开始工具：${toolName}` })
+      const toolEvent = event as unknown as { toolCallId: string; toolName: string; args: unknown }
+      if (toolEvent.toolName === 'task_start' || toolEvent.toolName === 'task_update') return
+      const intent = toolIntent(toolEvent.args) || toolEvent.toolName
+      const target = toolTarget(toolEvent.toolName, toolEvent.args)
+      const id = pushMessage(setMessages, {
+        role: 'tool',
+        text: `${intent}\n  ${toolEvent.toolName}${target ? ` · ${target}` : ''} · running`,
+      })
+      toolMessageIdsRef.current.set(toolEvent.toolCallId, id)
     }
     if (event.type === 'tool_execution_end') {
-      const toolName = (event as unknown as { toolName?: string }).toolName ?? 'tool'
-      const isError = (event as unknown as { isError?: boolean }).isError
-      pushMessage(setMessages, { role: 'tool', text: `${isError ? '失败' : '完成'}工具：${toolName}` })
+      const toolEvent = event as unknown as { toolCallId: string; toolName: string; result: unknown; isError: boolean }
+      if (toolEvent.toolName === 'task_start') {
+        pushMessage(setMessages, { role: 'system', text: '任务模式已启动' })
+        setTaskStatus('aligning')
+        return
+      }
+      if (toolEvent.toolName === 'task_update') {
+        const details = (toolEvent.result as { details?: { status?: string } } | undefined)?.details
+        const status = details?.status
+        pushMessage(setMessages, { role: 'system', text: status ? `任务状态：${status}` : '任务状态已更新' })
+        return
+      }
+      const id = toolMessageIdsRef.current.get(toolEvent.toolCallId)
+      if (!id) return
+      const previous = toolResultSummary(toolEvent.result, toolEvent.isError)
+      setMessages(current =>
+        current.map(message =>
+          message.id === id
+            ? { ...message, text: message.text.replace(/ · running$/, ` · ${previous}`) }
+            : message,
+        ),
+      )
+      toolMessageIdsRef.current.delete(toolEvent.toolCallId)
     }
     if (event.type === 'auto_retry_start') {
       const message = (event as unknown as { errorMessage?: string }).errorMessage ?? 'auto retry'
@@ -216,6 +291,11 @@ export function PiTuiApp() {
   const [isWorking, setIsWorking] = React.useState(false)
   const assistantMessageIdRef = React.useRef<string | null>(null)
   const streamedTextRef = React.useRef(false)
+  const toolMessageIdsRef = React.useRef(new Map<string, string>())
+  const [taskStatus, setTaskStatus] = React.useState<TaskStatus | null>(null)
+  const [readyMessage] = React.useState(
+    () => readyMessages[Math.floor(Math.random() * readyMessages.length)] ?? readyMessages[0],
+  )
 
   React.useEffect(() => {
     configureProxyFromEnv()
@@ -262,6 +342,8 @@ export function PiTuiApp() {
       setMessages,
       assistantMessageIdRef,
       streamedTextRef,
+      toolMessageIdsRef,
+      setTaskStatus,
     }).then(
       nextRuntime => {
         if (cancelled) {
@@ -335,6 +417,10 @@ export function PiTuiApp() {
         exit()
         return
       }
+      if (text === '/task') {
+        pushMessage(setMessages, { role: 'system', text: '请输入任务目标：/task <目标>' })
+        return
+      }
       if (text === '/model') {
         setPhase({
           kind: 'select_model',
@@ -392,9 +478,9 @@ export function PiTuiApp() {
     const inputText = task ? stripTaskPrefix(text) : text
     setIsWorking(true)
     pushMessage(setMessages, { role: 'user', text })
-    const assistantId = pushMessage(setMessages, { role: 'assistant', text: '' })
-    assistantMessageIdRef.current = assistantId
+    assistantMessageIdRef.current = null
     streamedTextRef.current = false
+    if (task) setTaskStatus('aligning')
 
     await runtime.traceLog.append({
       type: 'trace_started',
@@ -415,7 +501,7 @@ export function PiTuiApp() {
       await runtime.session.prompt(task ? taskModePrompt(inputText) : inputText)
       if (!streamedTextRef.current) {
         const finalText = assistantTextFromMessages(runtime.session.messages as unknown[])
-        if (finalText) appendToMessage(setMessages, assistantId, finalText)
+        if (finalText) pushMessage(setMessages, { role: 'assistant', text: finalText })
         const errorMessage = (runtime.session.agent.state as { errorMessage?: string }).errorMessage
         if (errorMessage) pushMessage(setMessages, { role: 'system', text: `[error] ${errorMessage}` })
       }
@@ -426,7 +512,7 @@ export function PiTuiApp() {
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      appendToMessage(setMessages, assistantId, `\n[error] ${message}`)
+      pushMessage(setMessages, { role: 'system', text: `[error] ${message}` })
       await runtime.traceLog.append({
         type: 'trace_finished',
         mode: task ? 'task' : 'chat',
@@ -441,26 +527,38 @@ export function PiTuiApp() {
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <Header phase={phase} runtime={runtime} />
-      <Body phase={phase} messages={messages} inputValue={inputValue} isWorking={isWorking} />
+      <Header phase={phase} runtime={runtime} readyMessage={readyMessage} />
+      <Body phase={phase} runtime={runtime} messages={messages} inputValue={inputValue} isWorking={isWorking} taskStatus={taskStatus} />
     </Box>
   )
 }
 
-function Header({ phase, runtime }: { phase: Phase; runtime: Runtime | null }) {
+function Header({ phase, runtime: _runtime, readyMessage }: { phase: Phase; runtime: Runtime | null; readyMessage: string }) {
   return (
     <Box flexDirection="column">
-      <Text bold color="cyan">Accorda Pi TUI</Text>
-      {runtime ? (
-        <Text color="gray">Model: {modelLabel(runtime.model)} · Thinking: {runtime.thinkingLevel} · Trace: {runtime.tracePath}</Text>
-      ) : (
-        <Text color="gray">{phase.kind === 'booting' ? 'Loading local Pi config...' : 'Pi SDK mode'}</Text>
-      )}
+      <Text bold color="#ff8c00">{readyMessage}</Text>
+      {phase.kind === 'booting' || phase.kind === 'creating_session' ? (
+        <Text color="gray">{phase.kind === 'booting' ? 'Loading local config...' : 'Starting...'}</Text>
+      ) : null}
     </Box>
   )
 }
 
-function Body({ phase, messages, inputValue, isWorking }: { phase: Phase; messages: Message[]; inputValue: string; isWorking: boolean }) {
+function Body({
+  phase,
+  runtime,
+  messages,
+  inputValue,
+  isWorking,
+  taskStatus,
+}: {
+  phase: Phase
+  runtime: Runtime | null
+  messages: Message[]
+  inputValue: string
+  isWorking: boolean
+  taskStatus: TaskStatus | null
+}) {
   if (phase.kind === 'booting' || phase.kind === 'creating_session') return <Text color="yellow">Preparing session...</Text>
   if (phase.kind === 'error') return <Text color="red">{phase.message}</Text>
   if (phase.kind === 'select_model') {
@@ -472,13 +570,19 @@ function Body({ phase, messages, inputValue, isWorking }: { phase: Phase; messag
   return (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="column">
-        {messages.length === 0 ? <Text color="gray">输入消息开始。/model 切模型，/think 切思考等级，/task &lt;目标&gt; 任务模式，/exit 退出。</Text> : null}
+        {messages.length === 0 ? null : null}
         {messages.slice(-18).map(message => <MessageLine key={message.id} message={message} />)}
+      </Box>
+      <Box justifyContent="space-between">
+        <Text color={taskStatus ? 'yellow' : 'gray'}>{taskStatus ? `task:${taskStatus}` : 'chat'}</Text>
       </Box>
       <Box borderStyle="single" borderColor={isWorking ? 'yellow' : 'gray'}>
         <Text>{isWorking ? '> Working...' : `> ${inputValue}|`}</Text>
       </Box>
-      <Text color="gray">Enter 发送 · /model 模型 · /think 思考等级 · /task &lt;目标&gt; · /exit</Text>
+      <Box justifyContent="space-between">
+        <Text color="gray">Enter · /model · /think · /task · /exit</Text>
+        <Text color="gray">{runtime ? `${compactModelLabel(runtime.model)} · ${runtime.thinkingLevel}` : ''}</Text>
+      </Box>
     </Box>
   )
 }
@@ -518,8 +622,8 @@ function SelectList({ title, items, selected, query }: { title: string; items: s
 }
 
 function MessageLine({ message }: { message: Message }) {
-  if (message.role === 'user') return <Text color="green">你：{message.text}</Text>
-  if (message.role === 'assistant') return <Text>助手：{message.text || '…'}</Text>
-  if (message.role === 'tool') return <Text color="yellow">工具：{message.text}</Text>
-  return <Text color="gray">系统：{message.text}</Text>
+  if (message.role === 'user') return <Text color="green">› {message.text}</Text>
+  if (message.role === 'assistant') return <Text>  {message.text || '…'}</Text>
+  if (message.role === 'tool') return <Text color="yellow">◇ {message.text}</Text>
+  return <Text color="gray">· {message.text}</Text>
 }
