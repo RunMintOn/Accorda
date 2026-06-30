@@ -95,6 +95,11 @@ function contextUsageLabel(runtime: Runtime | null) {
   return `ctx: ${tokenLabel}`
 }
 
+function traceRunLabel(tracePath: string) {
+  const match = tracePath.match(/(tr_[^/\\]+)[/\\]trace\.jsonl$/)
+  return match?.[1] ?? 'trace'
+}
+
 function findExactModel(models: Model<any>[], target: { provider: string; id: string }) {
   return models.find(model => {
     const key = modelKey(model)
@@ -486,6 +491,7 @@ export function PiTuiApp() {
             `一致性：${sameModel(actualModel, runtime.model) ? 'yes' : 'no'}`,
             `上下文：${contextUsageLabel(runtime)}`,
             `thinking：${runtime.session.thinkingLevel}`,
+            `trace：${runtime.tracePath}`,
             `保存配置：${saved}`,
             `模型配置：${join(cwd(), '.accorda', 'pi-agent', 'models.json')}`,
             `TUI 配置：${settingsPath()}`,
@@ -663,7 +669,7 @@ function Body({
       </Box>
       <Box justifyContent="space-between">
         <Text color="gray">Enter · /model · /think · /task · /skills · /status · /exit</Text>
-        <Text color="gray">{runtime ? `${contextUsageLabel(runtime)} · ${compactModelLabel(runtime.model)} · ${runtime.thinkingLevel}` : ''}</Text>
+        <Text color="gray">{runtime ? `${traceRunLabel(runtime.tracePath)} · ${contextUsageLabel(runtime)} · ${compactModelLabel(runtime.model)} · ${runtime.thinkingLevel}` : ''}</Text>
       </Box>
     </Box>
   )

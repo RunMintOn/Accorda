@@ -1,6 +1,6 @@
 ---
 name: retail-sales-trend
-description: 零售销售趋势分析 skill。Use when the user asks about sales trend, rising or declining products, recent sales changes, top movers, or SKU/store/category sales comparison.
+description: 零售销售趋势分析 skill。用于用户询问最近销量趋势、销量上涨/下降、哪些 SKU 卖得更好或变差、表现最好/最差商品、销售变化、门店/品类/SKU 对比等场景。Use for sales trend, rising or declining products, recent sales changes, top movers, and SKU/store/category sales comparison.
 ---
 
 # Retail Sales Trend

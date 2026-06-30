@@ -13,6 +13,7 @@
     "pi:repl": "tsx src/pi/piDev.ts",
     "retail:validate-data": "tsx src/eval/retailDataValidation.ts",
     "eval:retail": "tsx src/eval/retailEval.ts",
+    "eval:retail:trace": "tsx src/eval/retailTraceEval.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

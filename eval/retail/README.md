@@ -67,6 +67,31 @@ pass/fail:
 trace path:
 ```
 
+## Trace-based eval
+
+手动跑完某个 case 后，可以用生成的 readable trace 做证据检查：
+
+```bash
+npm run eval:retail:trace -- <case-id> <trace-path>
+```
+
+示例：
+
+```bash
+npm run eval:retail:trace -- low-stock-basic .accorda/pi-runs/tr_xxxxxx/trace.jsonl
+```
+
+它会检查：
+
+- trace 是否来自对应 `/skill:<name>` 输入
+- 是否出现期望数据文件名
+- 是否调用了 `bash`
+- 是否出现期望关键词
+- 是否没有出现禁止词
+- 是否有 JSON block 证据
+
+注意：Readable Trace 设计上不会复制完整 tool output / assistant output，所以 `expectedMentions` 和 JSON evidence 是 soft checks，只产生 warning，不作为失败条件。Hard checks 主要是 skill、数据文件、工具使用和 forbidden mentions。它的定位是运行后证据检查，不是完整语义评分。
+
 ## 当前约束
 
 - helper script 可以作为过渡，但不是长期边界。

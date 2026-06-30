@@ -1,6 +1,6 @@
 ---
 name: retail-inventory-risk
-description: 零售库存风险分析 skill。Use when the user asks about low stock, inventory risk, stockout risk, hot-selling items with insufficient inventory, or retail replenishment risk.
+description: 零售库存风险分析 skill。用于用户询问库存不足、低于安全库存、快断货、缺货风险、库存不够、热销但库存跟不上、是否需要补货、补货风险等场景。Use for low stock, inventory risk, stockout risk, hot-selling items with insufficient inventory, and replenishment risk.
 ---
 
 # Retail Inventory Risk
