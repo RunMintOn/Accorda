@@ -1,0 +1,21 @@
+{
+  "inventory": {
+    "low_stock": "on_hand < safety_stock",
+    "stock_gap": "max(0, safety_stock - on_hand)",
+    "coverage_days": "on_hand / max(avg_daily_sales, 1)"
+  },
+  "sales_trend": {
+    "growth_rate": "(current_units - previous_units) / max(previous_units, 1)",
+    "rising": "growth_rate >= 0.2",
+    "declining": "growth_rate <= -0.2"
+  },
+  "slow_moving": {
+    "high_inventory": "on_hand >= safety_stock * 3",
+    "low_recent_sales": "avg_daily_sales < 1",
+    "candidate": "high_inventory && low_recent_sales"
+  },
+  "replenishment": {
+    "suggested_order_qty": "max(0, safety_stock + lead_time_days * avg_daily_sales - on_hand)",
+    "note": "补货建议只是公式结果，不代表真实采购单或供应商确认。"
+  }
+}

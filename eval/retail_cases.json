@@ -1,0 +1,82 @@
+[
+  {
+    "id": "low-stock-basic",
+    "level": 1,
+    "input": "找出库存低于安全库存的商品",
+    "expectedSkill": "retail-inventory-risk",
+    "expectedDataFiles": ["inventory.csv", "products.csv"],
+    "expectedCalculations": ["on_hand < safety_stock", "stock_gap"],
+    "expectedMentions": ["LATTE_BEAN", "OAT_MILK", "MATCHA_POWDER", "库存缺口"],
+    "mustNotMention": ["无法判断", "没有数据"]
+  },
+  {
+    "id": "hot-selling-low-stock",
+    "level": 1,
+    "input": "哪些商品最近销量上涨但库存不足？",
+    "expectedSkill": "retail-inventory-risk",
+    "expectedDataFiles": ["sales.csv", "inventory.csv", "products.csv"],
+    "expectedCalculations": ["growth_rate", "on_hand < safety_stock"],
+    "expectedMentions": ["LATTE_BEAN", "OAT_MILK", "上涨", "库存"],
+    "mustNotMention": ["凭经验", "大概"]
+  },
+  {
+    "id": "sales-trend-top-movers",
+    "level": 1,
+    "input": "分析最近销售趋势，找出上涨和下降最明显的商品",
+    "expectedSkill": "retail-sales-trend",
+    "expectedDataFiles": ["sales.csv", "products.csv"],
+    "expectedCalculations": ["current_units", "previous_units", "growth_rate"],
+    "expectedMentions": ["LATTE_BEAN", "OAT_MILK", "COLD_BREW_BOTTLE", "增长率"],
+    "mustNotMention": ["无法判断"]
+  },
+  {
+    "id": "slow-moving-overstock",
+    "level": 1,
+    "input": "哪些商品库存很多但最近卖不动？",
+    "expectedSkill": "retail-inventory-risk",
+    "expectedDataFiles": ["sales.csv", "inventory.csv", "products.csv", "rules.json"],
+    "expectedCalculations": ["avg_daily_sales", "on_hand >= safety_stock * 3"],
+    "expectedMentions": ["CERAMIC_MUG", "高库存", "滞销"],
+    "mustNotMention": ["补货"]
+  },
+  {
+    "id": "replenishment-suggestion",
+    "level": 1,
+    "input": "根据当前库存和最近销量，给出今日补货建议",
+    "expectedSkill": "retail-inventory-risk",
+    "expectedDataFiles": ["sales.csv", "inventory.csv", "products.csv", "rules.json"],
+    "expectedCalculations": ["avg_daily_sales", "suggested_order_qty"],
+    "expectedMentions": ["补货", "LATTE_BEAN", "OAT_MILK", "公式"],
+    "mustNotMention": ["已下单", "供应商确认"]
+  },
+  {
+    "id": "missing-sku-fallback",
+    "level": 1,
+    "input": "查看 SKU ABC999 的库存风险",
+    "expectedSkill": "retail-inventory-risk",
+    "expectedDataFiles": ["inventory.csv", "products.csv"],
+    "expectedCalculations": [],
+    "expectedMentions": ["ABC999", "没有匹配", "查不到"],
+    "mustNotMention": ["库存正常", "建议补货"]
+  },
+  {
+    "id": "generalized-stockout-wording",
+    "level": 2,
+    "input": "帮我看看哪些东西快断货了",
+    "expectedSkill": "retail-inventory-risk",
+    "expectedDataFiles": ["inventory.csv"],
+    "expectedCalculations": ["on_hand < safety_stock"],
+    "expectedMentions": ["低库存", "安全库存"],
+    "mustNotMention": ["无法判断"]
+  },
+  {
+    "id": "generalized-sales-wording",
+    "level": 2,
+    "input": "最近哪些 SKU 卖得更好了，哪些变差了？",
+    "expectedSkill": "retail-sales-trend",
+    "expectedDataFiles": ["sales.csv"],
+    "expectedCalculations": ["growth_rate"],
+    "expectedMentions": ["上涨", "下降"],
+    "mustNotMention": ["没有数据"]
+  }
+]

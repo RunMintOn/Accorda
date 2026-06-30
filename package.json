@@ -11,6 +11,8 @@
     "pi:once:local": "node --env-file=.env.local --import tsx src/pi/runPiOnce.ts",
     "pi:dev": "tsx src/pi/piTui.tsx",
     "pi:repl": "tsx src/pi/piDev.ts",
+    "retail:validate-data": "tsx src/eval/retailDataValidation.ts",
+    "eval:retail": "tsx src/eval/retailEval.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

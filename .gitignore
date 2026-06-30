@@ -4,5 +4,7 @@ dist
 coverage
 *.log
 .env.local*
-.accorda/
+.accorda/*
+!.accorda/skills/
+!.accorda/skills/**
 dev_docs/

@@ -1,0 +1,9 @@
+sku,name,category,gross_margin,lead_time_days
+LATTE_BEAN,拿铁咖啡豆,coffee,0.42,3
+OAT_MILK,燕麦奶,dairy,0.31,2
+MATCHA_POWDER,抹茶粉,tea,0.38,4
+COLD_BREW_BOTTLE,冷萃瓶装咖啡,beverage,0.28,1
+CERAMIC_MUG,陶瓷杯,merch,0.55,7
+CROISSANT,可颂,bakery,0.35,1
+SANDWICH,三明治,food,0.33,1
+ESPRESSO_CUP,浓缩咖啡杯,merch,0.50,7

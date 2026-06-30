@@ -23,10 +23,10 @@ import {
   type TaskStatus,
 } from '../trace/readableTrace.js'
 import {
-  findConfiguredModel,
   loadPiTuiSettings,
   modelKey,
   savePiTuiSettings,
+  settingsPath,
   scopedAvailableModels,
   type PiTuiSettings,
 } from './piTuiSettings.js'
@@ -61,6 +61,7 @@ type Runtime = {
   model: Model<any>
   thinkingLevel: ThinkingLevel
   tracePath: string
+  skills: Array<{ name: string; description: string; filePath: string }>
 }
 
 function modelLabel(model: Model<any>) {
@@ -71,6 +72,34 @@ function modelLabel(model: Model<any>) {
 function compactModelLabel(model: Model<any>) {
   const candidate = model as unknown as { id?: string; name?: string }
   return candidate.id ?? candidate.name ?? 'unknown'
+}
+
+function sameModel(left: Model<any> | undefined, right: Model<any> | undefined) {
+  if (!left || !right) return false
+  const leftKey = modelKey(left)
+  const rightKey = modelKey(right)
+  return leftKey.provider === rightKey.provider && leftKey.id === rightKey.id
+}
+
+function formatTokenCount(value: number) {
+  if (value >= 1000) return `${Math.round(value / 1000)}k`
+  return String(value)
+}
+
+function contextUsageLabel(runtime: Runtime | null) {
+  if (!runtime) return ''
+  const usage = runtime.session.getContextUsage()
+  if (!usage) return 'ctx: unknown'
+  const tokenLabel = `${usage.tokens === null ? '?' : formatTokenCount(usage.tokens)}/${formatTokenCount(usage.contextWindow)}`
+  if (usage.percent !== null) return `ctx: ${Math.round(usage.percent)}% · ${tokenLabel}`
+  return `ctx: ${tokenLabel}`
+}
+
+function findExactModel(models: Model<any>[], target: { provider: string; id: string }) {
+  return models.find(model => {
+    const key = modelKey(model)
+    return key.provider === target.provider && key.id === target.id
+  })
 }
 
 function taskModeGuidance() {
@@ -182,9 +211,12 @@ async function createRuntime({
 
   const authStorage = AuthStorage.create(join(localAgentDir, 'auth.json'))
   const modelRegistry = ModelRegistry.create(authStorage, join(localAgentDir, 'models.json'))
+  const projectSkillsDir = join(cwd(), '.accorda', 'skills')
   const loader = new DefaultResourceLoader({
     cwd: cwd(),
     agentDir: localAgentDir,
+    noSkills: true,
+    additionalSkillPaths: [projectSkillsDir],
     systemPromptOverride: base => `${base ?? ''}\n\n${taskModeGuidance()}`.trim(),
     extensionFactories: [
       createAccordaExtension({
@@ -199,6 +231,11 @@ async function createRuntime({
     ],
   })
   await loader.reload()
+  const skills = loader.getSkills().skills.map(skill => ({
+    name: skill.name,
+    description: skill.description,
+    filePath: skill.filePath,
+  }))
 
   const { session } = await createAgentSession({
     cwd: cwd(),
@@ -277,6 +314,7 @@ async function createRuntime({
     model,
     thinkingLevel,
     tracePath: traceLog.path,
+    skills,
   }
 }
 
@@ -284,6 +322,7 @@ export function PiTuiApp() {
   const { exit } = useApp()
   const [phase, setPhase] = React.useState<Phase>({ kind: 'booting' })
   const [runtime, setRuntime] = React.useState<Runtime | null>(null)
+  const runtimeRef = React.useRef<Runtime | null>(null)
   const [settings, setSettings] = React.useState<PiTuiSettings | null>(null)
   const [availableModels, setAvailableModels] = React.useState<Model<any>[]>([])
   const [messages, setMessages] = React.useState<Message[]>([])
@@ -310,7 +349,17 @@ export function PiTuiApp() {
           throw new Error('没有可用模型。请先运行 pi 并通过 /login 登录，或检查 .accorda/pi-agent/auth.json。')
         }
         const nextSettings = await loadPiTuiSettings()
-        const model = findConfiguredModel(models, nextSettings)
+        let model: Model<any> | undefined
+        if (nextSettings.model) {
+          model = findExactModel(models, nextSettings.model)
+          if (!model) {
+            throw new Error(
+              `当前保存的模型不可用：${nextSettings.model.provider}/${nextSettings.model.id}。请编辑 ${settingsPath()} 或恢复该模型配置；Accorda 不会自动 fallback 到其他模型。`,
+            )
+          }
+        } else {
+          model = scopedAvailableModels(models, nextSettings)[0]
+        }
         if (!model) throw new Error('没有可用模型。请先运行 pi 并通过 /login 登录。')
         if (!cancelled) {
           setSettings(nextSettings)
@@ -362,7 +411,11 @@ export function PiTuiApp() {
     }
   }, [phase])
 
-  React.useEffect(() => () => runtime?.session.dispose(), [runtime])
+  React.useEffect(() => {
+    runtimeRef.current = runtime
+  }, [runtime])
+
+  React.useEffect(() => () => runtimeRef.current?.session.dispose(), [])
 
   useInput((input, key) => {
     if (phase.kind === 'error') {
@@ -419,6 +472,35 @@ export function PiTuiApp() {
       }
       if (text === '/task') {
         pushMessage(setMessages, { role: 'system', text: '请输入任务目标：/task <目标>' })
+        return
+      }
+      if (text === '/status') {
+        if (!runtime) return
+        const actualModel = runtime.session.model
+        const saved = settings?.model ? `${settings.model.provider}/${settings.model.id}` : '未保存'
+        pushMessage(setMessages, {
+          role: 'system',
+          text: [
+            `当前模型：${actualModel ? modelLabel(actualModel) : '未设置'}`,
+            `TUI 显示：${modelLabel(runtime.model)}`,
+            `一致性：${sameModel(actualModel, runtime.model) ? 'yes' : 'no'}`,
+            `上下文：${contextUsageLabel(runtime)}`,
+            `thinking：${runtime.session.thinkingLevel}`,
+            `保存配置：${saved}`,
+            `模型配置：${join(cwd(), '.accorda', 'pi-agent', 'models.json')}`,
+            `TUI 配置：${settingsPath()}`,
+            '模型 fallback：disabled',
+            'skills scope：.accorda/skills',
+          ].join('\n'),
+        })
+        return
+      }
+      if (text === '/skills') {
+        if (!runtime) return
+        const skillText = runtime.skills.length > 0
+          ? `可用 skills：\n${runtime.skills.map(skill => `- ${skill.name} — ${skill.description}`).join('\n')}`
+          : '没有发现项目 skills。当前只扫描 .accorda/skills/'
+        pushMessage(setMessages, { role: 'system', text: skillText })
         return
       }
       if (text === '/model') {
@@ -580,8 +662,8 @@ function Body({
         <Text>{isWorking ? '> Working...' : `> ${inputValue}|`}</Text>
       </Box>
       <Box justifyContent="space-between">
-        <Text color="gray">Enter · /model · /think · /task · /exit</Text>
-        <Text color="gray">{runtime ? `${compactModelLabel(runtime.model)} · ${runtime.thinkingLevel}` : ''}</Text>
+        <Text color="gray">Enter · /model · /think · /task · /skills · /status · /exit</Text>
+        <Text color="gray">{runtime ? `${contextUsageLabel(runtime)} · ${compactModelLabel(runtime.model)} · ${runtime.thinkingLevel}` : ''}</Text>
       </Box>
     </Box>
   )
